@@ -15,20 +15,20 @@
 
 #include <SDSink.h>
 
-// this file names are deifned middle C (60) as C3
+// this file names are deifned middle C (60) as C4
 const SDSink::Item table[12] = {
-    {60, "AUDIO/C3.wav"},   // C3
-    {61, "AUDIO/C#3.wav"},  // C#3
-    {62, "AUDIO/D3.wav"},   // D3
-    {63, "AUDIO/D#3.wav"},  // D#3
-    {64, "AUDIO/E3.wav"},   // E3
-    {65, "AUDIO/F3.wav"},   // F3
-    {66, "AUDIO/F#3.wav"},  // F#3
-    {67, "AUDIO/G3.wav"},   // G3
-    {68, "AUDIO/G#3.wav"},  // G#3
-    {69, "AUDIO/A3.wav"},   // A3
-    {70, "AUDIO/A#3.wav"},  // A#3
-    {71, "AUDIO/B3.wav"}    // B3
+    {60, "SawLpf/60_C4.wav"},   // C4
+    {61, "SawLpf/61_C#4.wav"},  // C#4
+    {62, "SawLpf/62_D4.wav"},   // D4
+    {63, "SawLpf/63_D#4.wav"},  // D#4
+    {64, "SawLpf/64_E4.wav"},   // E4
+    {65, "SawLpf/65_F4.wav"},   // F4
+    {66, "SawLpf/66_F#4.wav"},  // F#4
+    {67, "SawLpf/67_G4.wav"},   // G4
+    {68, "SawLpf/68_G#4.wav"},  // G#4
+    {69, "SawLpf/69_A4.wav"},   // A4
+    {70, "SawLpf/70_A#4.wav"},  // A#4
+    {71, "SawLpf/71_B4.wav"}    // B4
 };
 SDSink inst(table, 12);
 

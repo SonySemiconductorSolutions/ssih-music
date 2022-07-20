@@ -17,7 +17,7 @@
 #include <SFZSink.h>
 #include <VoiceTriggerSrc.h>
 
-SFZSink sink("CupHorn.sfz");
+SFZSink sink("SawLpf.sfz");
 CorrectToneFilter filter("SCORE", sink);
 VoiceTriggerSrc inst(filter);
 

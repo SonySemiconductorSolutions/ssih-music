@@ -16,7 +16,7 @@
 #include <OneKeySynthesizerFilter.h>
 #include <SFZSink.h>
 
-SFZSink sink("CupHorn.sfz");
+SFZSink sink("SawLpf.sfz");
 OneKeySynthesizerFilter inst("SCORE", sink);
 
 int button4 = HIGH;

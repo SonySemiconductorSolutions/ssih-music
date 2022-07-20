@@ -16,26 +16,26 @@
 #include <SDSink.h>
 #include <YuruhornSrc.h>
 
-// this file names are deifned middle C (60) as C3
-const SDSink::Item table[26] = {
-    {48, "AUDIO/C2.wav"}, {49, "AUDIO/C#2.wav"},  //< C2, C#2
-    {50, "AUDIO/D2.wav"}, {51, "AUDIO/D#2.wav"},  //< D2, D#2
-    {52, "AUDIO/E2.wav"},                         //< E2
-    {53, "AUDIO/F2.wav"}, {54, "AUDIO/F#2.wav"},  //< F2, F#2
-    {55, "AUDIO/G2.wav"}, {56, "AUDIO/G#2.wav"},  //< G2, G#2
-    {57, "AUDIO/A2.wav"}, {58, "AUDIO/A#2.wav"},  //< A2, A#2
-    {59, "AUDIO/B2.wav"},                         //< B2
-    {60, "AUDIO/C3.wav"}, {61, "AUDIO/C#3.wav"},  //< C3, C#3
-    {62, "AUDIO/D3.wav"}, {63, "AUDIO/D#3.wav"},  //< D3, D#3
-    {64, "AUDIO/E3.wav"},                         //< E3
-    {65, "AUDIO/F3.wav"}, {66, "AUDIO/F#3.wav"},  //< F3, F#3
-    {67, "AUDIO/G3.wav"}, {68, "AUDIO/G#3.wav"},  //< G3, G#3
-    {69, "AUDIO/A3.wav"}, {70, "AUDIO/A#3.wav"},  //< A3, A#3
-    {71, "AUDIO/B3.wav"},                         //< B3
-    {72, "AUDIO/C4.wav"}, {73, "AUDIO/C#4.wav"}   //< C4, C#4
+// this file names are deifned middle C (60) as C4
+const SDSink::Item table[25] = {
+    {48, "SawLpf/48_C3.wav"}, {49, "SawLpf/49_C#3.wav"},  //< C3, C#3
+    {50, "SawLpf/50_D3.wav"}, {51, "SawLpf/51_D#3.wav"},  //< D3, D#3
+    {52, "SawLpf/52_E3.wav"},                             //< E3
+    {53, "SawLpf/53_F3.wav"}, {54, "SawLpf/54_F#3.wav"},  //< F3, F#3
+    {55, "SawLpf/55_G3.wav"}, {56, "SawLpf/56_G#3.wav"},  //< G3, G#3
+    {57, "SawLpf/57_A3.wav"}, {58, "SawLpf/58_A#3.wav"},  //< A3, A#3
+    {59, "SawLpf/59_B3.wav"},                             //< B3
+    {60, "SawLpf/60_C4.wav"}, {61, "SawLpf/61_C#4.wav"},  //< C4, C#3
+    {62, "SawLpf/62_D4.wav"}, {63, "SawLpf/63_D#4.wav"},  //< D4, D#4
+    {64, "SawLpf/64_E4.wav"},                             //< E4
+    {65, "SawLpf/65_F4.wav"}, {66, "SawLpf/66_F#4.wav"},  //< F4, F#4
+    {67, "SawLpf/67_G4.wav"}, {68, "SawLpf/68_G#4.wav"},  //< G4, G#4
+    {69, "SawLpf/69_A4.wav"}, {70, "SawLpf/70_A#4.wav"},  //< A4, A#4
+    {71, "SawLpf/71_B4.wav"},                             //< B4
+    {72, "SawLpf/72_C5.wav"}                              //< C5
 };
 
-SDSink sink(table, 26);
+SDSink sink(table, 25);
 YuruhornSrc inst(sink);
 
 void setup() {

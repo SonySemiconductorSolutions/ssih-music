@@ -16,7 +16,7 @@
 #include <ScoreSrc.h>
 #include <SFZSink.h>
 
-SFZSink sink("CupHorn.sfz");
+SFZSink sink("SawLpf.sfz");
 ScoreSrc inst("SCORE", sink);
 
 void setup() {
