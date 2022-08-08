@@ -3,6 +3,9 @@
 このライブラリは[Spresense](https://www.sony-semicon.co.jp/products/smart-sensing/spresense/)で簡単に楽器を開発するためのものです。
 電子楽器の演奏データを定めるMIDI規格をベースとしたAPIと、Spresenseのオーディオ入力・オーディオ出力を簡単に扱える機能ブロックを提供します。
 
+このライブラリを試すには音源データが必要です。
+音源データは[こちら](https://github.com/SonySemiconductorSolutions/ssih-music/releases/latest/download/assets.zip)からダウンロードしてください。
+
 ## チュートリアルの内容
 
 * 開発環境のセットアップ
@@ -38,7 +41,7 @@
     * Arduino IDEを開き、 `ツール` > `ボード` > `Spresense Instrument Boards` > `Spresense Instrument` を選択できることを確認します。
     * メニューに現れない場合は、開発環境のセットアップ手順を最初からやり直してください。
 3. Sound Signal Processing Library for SpresenseをArduino IDEにインストールする
-    1. [リリースページ](https://github.com/SonySemiconductorSolutions/ssih-music/releases)から Source code (zip) をダウンロードする
+    1. [リリースページ](https://github.com/SonySemiconductorSolutions/ssih-music/releases/)から Source code (zip) をダウンロードする
     2. Arduino IDEを開き、 `スケッチ` > `ライブラリをインクルード` > `.ZIP形式ライブラリをインストール` をクリック
     3. ダイアログが開いたら、1でダウンロードした ssih-music.zip を選択して `開く` をクリック
 
@@ -72,7 +75,7 @@
 
 1. 音源ファイルをmicroSDカードに書き込む
     1. microSDカードをPCに挿入する
-    2. [リリースページ](https://github.com/SonySemiconductorSolutions/ssih-music/releases)からassets.zipをダウンロードして、展開したファイルをmicroSDカードにコピーする
+    2. [リリースページ](https://github.com/SonySemiconductorSolutions/ssih-music/releases/)から[assets.zip](https://github.com/SonySemiconductorSolutions/ssih-music/releases/latest/download/assets.zip)をダウンロードして、展開したファイルをmicroSDカードにコピーする
     3. microSDカードをSpresense 拡張ボードのmicroSDHCスロットに挿入する
 2. 共通スケッチを書き込む
     1. Arduino IDEを開き、 `ファイル` > `スケッチ例` > `Sound Signal Processing Library for Spresense` > `YuruHorn_SubCore1` を選択する
