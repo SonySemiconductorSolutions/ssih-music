@@ -11,8 +11,6 @@
 #error "Core selection is wrong!!"
 #endif
 
-#include <MemoryUtil.h>
-
 #include <SDSink.h>
 
 // this file names are deifned middle C (60) as C4
@@ -50,10 +48,6 @@ void setup() {
     pinMode(PIN_D04, INPUT_PULLUP);
     pinMode(PIN_D05, INPUT_PULLUP);
     pinMode(PIN_D06, INPUT_PULLUP);
-
-    // initialize memory pool
-    initMemoryPools();
-    createStaticPools(MEM_LAYOUT_RECORDINGPLAYER);
 
     // setup instrument
     if (!inst.begin()) {

@@ -10,6 +10,7 @@
 
 #include <Arduino.h>
 
+#include <File.h>
 #include <SDHCI.h>
 
 #include "YuruInstrumentConfig.h"
@@ -213,8 +214,10 @@ static int CommandLoadConfig(YuruInstrumentConsole *console, int argc, char *arg
         return -YuruInstrumentConfig::kErrInval;
     }
     if (argc > 1) {
-        YuruInstrumentConfig config(console->getFilter());
-        return config.loadFromFile(argv[1]);
+        Filter *filter = console->getFilter();
+        if (filter) {
+            return console->loadFromFile(argv[1]);
+        }
     }
     return -YuruInstrumentConfig::kErrInval;
 }
@@ -224,8 +227,10 @@ static int CommandSaveConfig(YuruInstrumentConsole *console, int argc, char *arg
         return -YuruInstrumentConfig::kErrInval;
     }
     if (argc > 1) {
-        YuruInstrumentConfig config(console->getFilter());
-        return config.saveToFile(argv[1]);
+        Filter *filter = console->getFilter();
+        if (filter) {
+            return console->saveToFile(argv[1]);
+        }
     }
     return -YuruInstrumentConfig::kErrInval;
 }
@@ -234,8 +239,11 @@ static int CommandListParam(YuruInstrumentConsole *console, int argc, char *argv
     if (console == nullptr) {
         return -YuruInstrumentConfig::kErrInval;
     }
-    YuruInstrumentConfig config(console->getFilter());
-    return config.printParamList();
+    Filter *filter = console->getFilter();
+    if (filter) {
+        return console->printParamList();
+    }
+    return -YuruInstrumentConfig::kErrInval;
 }
 
 static int CommandIsAvailable(YuruInstrumentConsole *console, int argc, char *argv[]) {
@@ -244,8 +252,10 @@ static int CommandIsAvailable(YuruInstrumentConsole *console, int argc, char *ar
     }
     if (argc > 1) {
         const char *param_id = argv[1];
-        YuruInstrumentConfig config(console->getFilter());
-        return config.printParam(param_id);
+        Filter *filter = console->getFilter();
+        if (filter) {
+            return console->printParam(param_id);
+        }
     }
     return -YuruInstrumentConfig::kErrInval;
 }
@@ -256,8 +266,10 @@ static int CommandGetParam(YuruInstrumentConsole *console, int argc, char *argv[
     }
     if (argc > 1) {
         const char *param_id = argv[1];
-        YuruInstrumentConfig config(console->getFilter());
-        return config.printParam(param_id);
+        Filter *filter = console->getFilter();
+        if (filter) {
+            return console->printParam(param_id);
+        }
     }
     return -YuruInstrumentConfig::kErrInval;
 }
@@ -269,8 +281,10 @@ static int CommandSetParam(YuruInstrumentConsole *console, int argc, char *argv[
     if (argc > 2) {
         const char *param_id = argv[1];
         const char *value_str = argv[2];
-        YuruInstrumentConfig config(console->getFilter());
-        return config.setParam(param_id, value_str);
+        Filter *filter = console->getFilter();
+        if (filter) {
+            return console->setParam(param_id, value_str);
+        }
     }
     return -YuruInstrumentConfig::kErrInval;
 }
@@ -374,11 +388,8 @@ static int CommandHelp(YuruInstrumentConsole *console, int argc, char *argv[]) {
     return YuruInstrumentConfig::kNoError;
 }
 
-YuruInstrumentConsole::YuruInstrumentConsole(Filter *filter)
-    : filter_(filter), line_length_(kMaxLineLength), line_buffer_(new char[line_length_]), line_index_(0) {
-}
-
-YuruInstrumentConsole::YuruInstrumentConsole(Filter &filter) : YuruInstrumentConsole(&filter) {
+YuruInstrumentConsole::YuruInstrumentConsole(Filter &filter)
+    : YuruInstrumentConfig(filter), line_length_(kMaxLineLength), line_buffer_(new char[line_length_]), line_index_(0) {
 }
 
 YuruInstrumentConsole::~YuruInstrumentConsole() {
@@ -388,10 +399,6 @@ YuruInstrumentConsole::~YuruInstrumentConsole() {
     }
     line_length_ = 0;
     line_index_ = 0;
-}
-
-Filter *YuruInstrumentConsole::getFilter() {
-    return filter_;
 }
 
 void YuruInstrumentConsole::begin() {

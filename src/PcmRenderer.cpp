@@ -32,6 +32,8 @@
 #define error_printf printf
 #endif  // if defined(DEBUG)
 
+const static uint8_t kUnderflowThreshold = 2;
+
 /**
  * @brief singleton of OutputMixer
  *
@@ -91,6 +93,8 @@ PcmRenderer::PcmRenderer(int sample_rate, int bit_depth, int channels, int sampl
       bit_depth_(bit_depth),
       channels_(channels),
       samples_per_frame_(samples_per_frame),
+      request_count_(0),
+      response_count_(0),
       frames_(0),
       capacity_(cache_capacity),
       mix_channels_((mix_channels < PcmRenderer::kMaxChannelNum) ? mix_channels : PcmRenderer::kMaxChannelNum) {
@@ -168,8 +172,11 @@ bool PcmRenderer::render() {
         read_size = 0;
     } else if (state == kStateActive) {
         if (read_size < frame_size) {
-            // retry after
-            return false;
+            // if underflow is near, continue to sendData
+            if (request_count_ - response_count_ > kUnderflowThreshold) {
+                // retry after
+                return false;
+            }
         }
     }
 
@@ -212,6 +219,8 @@ bool PcmRenderer::render() {
         error_printf("error: failed OutputMixer::sendData => %d\n", err);
         return false;
     }
+
+    request_count_++;
     return true;
 }
 
@@ -228,6 +237,7 @@ void PcmRenderer::onActivated(MsgQueId requester_dtq, MsgType msgtype, AsOutputM
 
 void PcmRenderer::onSendData(int32_t identifier, bool is_end) {
     // trace_printf("%s(%d, %d)\n", __func__, identifier, is_end);
+    response_count_++;
     while (true) {
         if (render()) {
             continue;

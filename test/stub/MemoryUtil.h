@@ -12,10 +12,16 @@
 #define SECTION_NO0 (0)
 #define SECTION_NO1 (1)
 
+#define MEM_LAYOUT_RECORDINGPLAYER (2)
+
 typedef int MsgType;
 typedef int MsgQueId;
 
 typedef int PoolId;
+
+int initMemoryPools(void);
+
+int createStaticPools(uint8_t layout_no);
 
 class MemHandle {
 public:

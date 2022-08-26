@@ -10,12 +10,9 @@
 
 #include <Arduino.h>
 
+#include <File.h>
 #include <SDHCI.h>
 
-#include "OctaveShift.h"
-#include "ScoreSrc.h"
-#include "ToneFilter.h"
-#include "YuruhornSrc.h"
 #include "YuruInstrumentFilter.h"
 
 //#define DEBUG
@@ -33,113 +30,14 @@
 #define error_printf printf
 #endif  // DEBUG
 
-enum ErrorCode { kNoError = 0, kErrPerm, kErrNoEnt, kErrAccess, kErrExist, kErrNoDev, kErrNotDir, kErrIsDir, kErrInval };
-
 const int kMaxLineLength = 64;
 const int kBaudrate = 115200;  //< 115200bps
 const char kSectionName[] = "yurugakki";
-
-enum ParamType { kIntegerValue, kIntegerValueReadOnly, kStringValue, kStringValueReadOnly };
-
-struct ParamSpec {
-    const char *name;
-    int id;
-    ParamType type;
-};
 
 struct CommandSpec {
     const char *name;
     int (*func)(YuruInstrumentConfig *config, int argc, char *argv[]);
 };
-
-// clang-format off
-static const ParamSpec g_param_spec[] = {
-    {"mic_gain",       VoiceCapture::PARAMID_MIC_GAIN,          kIntegerValue        },
-    {"input_level",    VoiceCapture::PARAMID_INPUT_LEVEL,       kIntegerValue        },
-    {"rec",            VoiceCapture::PARAMID_RECORDING,         kIntegerValueReadOnly},
-    {"active_level",   YuruhornSrc::PARAMID_ACTIVE_LEVEL,       kIntegerValue        },
-    {"play_button",    YuruhornSrc::PARAMID_PLAY_BUTTON_ENABLE, kIntegerValue        },
-    {"play_scale",     YuruhornSrc::PARAMID_SCALE,              kIntegerValue        },
-    {"min_note",       YuruhornSrc::PARAMID_MIN_NOTE,           kIntegerValue        },
-    {"max_note",       YuruhornSrc::PARAMID_MAX_NOTE,           kIntegerValue        },
-    {"correct_frame",  YuruhornSrc::PARAMID_CORRECT_FRAMES,     kIntegerValue        },
-    {"suppress_frame", YuruhornSrc::PARAMID_SUPPRESS_FRAMES,    kIntegerValue        },
-    {"keep_frame",     YuruhornSrc::PARAMID_KEEP_FRAMES,        kIntegerValue        },
-    {"volume_meter",   YuruhornSrc::PARAMID_VOLUME_METER,       kIntegerValueReadOnly},
-    {"monitoring",     YuruhornSrc::PARAMID_MONITOR_ENABLE,     kIntegerValue        },
-    {"score_num",      ScoreSrc::PARAMID_NUMBER_OF_SCORES,      kIntegerValueReadOnly},
-    {"playing_score",  ScoreSrc::PARAMID_PLAYING_SCORE,         kIntegerValueReadOnly},
-    {"score_name",     ScoreSrc::PARAMID_PLAYING_SCORE_NAME,    kStringValueReadOnly },
-    {"octave_shift",   OctaveShift::PARAMID_OCTAVE_SHIFT,       kIntegerValue        },
-    {"tone",           ToneFilter::PARAMID_TONE,                kIntegerValue        },
-    {"volume",         Filter::PARAMID_OUTPUT_LEVEL,            kIntegerValue        }
-};
-// clang-format on
-
-static const ParamSpec *FindParamSpecByName(const char *param_name) {
-    const int kParamSpecNum = sizeof(g_param_spec) / sizeof(g_param_spec[0]);
-    for (int i = 0; i < kParamSpecNum; i++) {
-        if (strcmp(g_param_spec[i].name, param_name) == 0) {
-            return &g_param_spec[i];
-        }
-    }
-    return nullptr;
-}
-
-static const ParamSpec *FindParamSpecById(int param_id) {
-    const int kParamSpecNum = sizeof(g_param_spec) / sizeof(g_param_spec[0]);
-    for (int i = 0; i < kParamSpecNum; i++) {
-        if (param_id == g_param_spec[i].id) {
-            return &g_param_spec[i];
-        }
-    }
-    return nullptr;
-}
-
-static int ApplyParam(YuruInstrumentConfig *config, const String &section, const String &name, const String &value) {
-    if (config == nullptr) {
-        return -kErrInval;
-    }
-    Filter *filter = config->getFilter();
-    if (filter == nullptr) {
-        return -kErrInval;
-    }
-
-    if (section == kSectionName) {
-        char *endp = nullptr;
-
-        const ParamSpec *param_spec = FindParamSpecByName(name.c_str());
-        if (param_spec == nullptr) {
-            int param_id = strtol(name.c_str(), &endp, 0);
-            if (endp == nullptr || *endp != '\0') {
-                return -kErrInval;
-            }
-            param_spec = FindParamSpecById(param_id);
-        }
-        if (param_spec == nullptr) {
-            return -kErrInval;
-        }
-
-        intptr_t param_value = strtol(value.c_str(), &endp, 0);
-        if (endp == nullptr || *endp != '\0') {
-            error_printf("parse error: parse '%s' as integer\n", value.c_str());
-            return -kErrInval;
-        }
-
-        bool is_available = filter->isAvailable(param_spec->id);
-        if (is_available) {
-            filter->setParam(param_spec->id, param_value);
-            printf("setParam[%d] = %d\n", param_spec->id, (int)param_value);
-            return 0;
-        } else {
-            printf("isAvailable[%d] = %d\n", param_spec->id, is_available);
-        }
-    }
-    return -kErrInval;
-}
-
-YuruInstrumentConfig::YuruInstrumentConfig(Filter *filter) : filter_(filter) {
-}
 
 YuruInstrumentConfig::YuruInstrumentConfig(Filter &filter) : filter_(&filter) {
 }
@@ -152,9 +50,8 @@ Filter *YuruInstrumentConfig::getFilter() {
 }
 
 int YuruInstrumentConfig::printParamList() {
-    const int kParamSpecNum = sizeof(g_param_spec) / sizeof(g_param_spec[0]);
-    for (int i = 0; i < kParamSpecNum; i++) {
-        printf("%d: %s\n", g_param_spec[i].id, g_param_spec[i].name);
+    for (const auto &e : param_specs_) {
+        printf("%d: %s\n", e.id, e.name.c_str());
     }
     return 0;
 }
@@ -163,7 +60,13 @@ int YuruInstrumentConfig::printAvailable(const char *param_str) {
     if (filter_) {
         char *endp = nullptr;
         int param_id = -1;
-        const ParamSpec *param_spec = FindParamSpecByName(param_str);
+        const YuruInstrumentConfig::ParamSpec *param_spec = nullptr;
+        for (const auto &e : param_specs_) {
+            if (e.name == param_str) {
+                param_spec = &e;
+                break;
+            }
+        }
         if (param_spec) {
             param_id = param_spec->id;
         } else {
@@ -183,7 +86,13 @@ int YuruInstrumentConfig::printParam(const char *param_str) {
     if (filter_) {
         char *endp = nullptr;
         int param_id = -1;
-        const ParamSpec *param_spec = FindParamSpecByName(param_str);
+        const YuruInstrumentConfig::ParamSpec *param_spec = nullptr;
+        for (const auto &e : param_specs_) {
+            if (e.name == param_str) {
+                param_spec = &e;
+                break;
+            }
+        }
         if (param_spec) {
             param_id = param_spec->id;
         } else {
@@ -205,11 +114,35 @@ int YuruInstrumentConfig::printParam(const char *param_str) {
     return -kErrInval;
 }
 
+int YuruInstrumentConfig::registerParam(const char *name, int id, bool readonly) {
+    YuruInstrumentConfig::ParamSpec spec;
+    spec.name = name;
+    spec.id = id;
+    spec.type = readonly ? YuruInstrumentConfig::kIntegerValueReadOnly : YuruInstrumentConfig::kIntegerValue;
+    param_specs_.push_back(spec);
+    return 0;
+}
+
+int YuruInstrumentConfig::registerStringParam(const char *name, int id, bool readonly) {
+    YuruInstrumentConfig::ParamSpec spec;
+    spec.name = name;
+    spec.id = id;
+    spec.type = readonly ? YuruInstrumentConfig::kStringValueReadOnly : YuruInstrumentConfig::kStringValue;
+    param_specs_.push_back(spec);
+    return 0;
+}
+
 int YuruInstrumentConfig::setParam(const char *param_str, const char *value_str) {
     if (filter_) {
         char *endp = nullptr;
         int param_id = -1;
-        const ParamSpec *param_spec = FindParamSpecByName(param_str);
+        const YuruInstrumentConfig::ParamSpec *param_spec = nullptr;
+        for (const auto &e : param_specs_) {
+            if (e.name == param_str) {
+                param_spec = &e;
+                break;
+            }
+        }
         if (param_spec) {
             param_id = param_spec->id;
         } else {
@@ -273,7 +206,45 @@ int YuruInstrumentConfig::loadFromFile(const char *path) {
             String value = line.substring(pos + 1);
             name.trim();
             value.trim();
-            ApplyParam(this, section, name, value);
+            if (section != kSectionName) {
+                continue;
+            }
+
+            const YuruInstrumentConfig::ParamSpec *param_spec = nullptr;
+            for (const auto &e : param_specs_) {
+                if (e.name == name) {
+                    param_spec = &e;
+                    break;
+                }
+            }
+            if (param_spec == nullptr) {
+                char *endp = nullptr;
+                int param_id = strtol(name.c_str(), &endp, 0);
+                if (endp == nullptr || *endp != '\0') {
+                    continue;
+                }
+                for (const auto &e : param_specs_) {
+                    if (e.id == param_id) {
+                        param_spec = &e;
+                        break;
+                    }
+                }
+            }
+            if (param_spec) {
+                char *endp = nullptr;
+                intptr_t param_value = strtol(value.c_str(), &endp, 0);
+                if (endp == nullptr || *endp != '\0') {
+                    continue;
+                }
+
+                bool is_available = filter_->isAvailable(param_spec->id);
+                if (is_available) {
+                    filter_->setParam(param_spec->id, param_value);
+                    printf("setParam[%d] = %d\n", param_spec->id, (int)param_value);
+                } else {
+                    printf("isAvailable[%d] = %d\n", param_spec->id, is_available);
+                }
+            }
         }
     }
     return 0;
@@ -293,18 +264,16 @@ int YuruInstrumentConfig::saveToFile(const char *path) {
     file.print("[");
     file.print(kSectionName);
     file.println("]");
-    const int kParamSpecNum = sizeof(g_param_spec) / sizeof(g_param_spec[0]);
-    for (int i = 0; i < kParamSpecNum; i++) {
-        const ParamSpec &param = g_param_spec[i];
-        if (filter_ && filter_->isAvailable(param.id)) {
-            if (param.type == kIntegerValue) {
-                file.print(param.name);
+    for (const auto &e : param_specs_) {
+        if (filter_ && filter_->isAvailable(e.id)) {
+            if (e.type == kIntegerValue) {
+                file.print(e.name);
                 file.print('=');
-                file.println((long)filter_->getParam(param.id));
-            } else if (param.type == kStringValue) {
-                file.print(param.name);
+                file.println((long)filter_->getParam(e.id));
+            } else if (e.type == kStringValue) {
+                file.print(e.name);
                 file.print('=');
-                file.println((const char *)filter_->getParam(param.id));
+                file.println((const char *)filter_->getParam(e.id));
             }
         }
     }
