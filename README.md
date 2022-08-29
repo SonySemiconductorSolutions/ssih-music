@@ -6,8 +6,8 @@
 | ---        | ---         | ---                                                              |
 | v0.6.0     | 2022-07-20  | 初版                                                             |
 | v0.7.0     | 2022-08-26  | (機能追加) スケッチでメモリプールの初期化が不要になりました。    |
-|            |             | (不具合修正) 音声データの供給がされないと異常停止する問題        |
-|            |             | (不具合修正) 一部のSFZファイルのロードができない問題             |
+|            |             | (不具合修正) https://github.com/SonySemiconductorSolutions/ssih-music/issues/3: 音声データの供給がされないと異常停止する問題を修正しました。    |
+|            |             | (不具合修正) https://github.com/SonySemiconductorSolutions/ssih-music/issues/4: 一部のSFZファイルのロードができない問題を修正しました。         |
 |            |             | (サンプル) サンプルスケッチにYuruFlaCastanetを追加しました。     |
 
 ## ライブラリ概要
