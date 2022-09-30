@@ -26,11 +26,12 @@
 #endif  // if defined(DEBUG)
 
 // playback parameters
+// NOTICE: PcmRenderer only supports 48kHz/16bit/2ch. Otherwise, it will not work.
 const int kPbSampleFrq = 48000;
 const int kPbBitDepth = 16;
 const int kPbChannelCount = 2;
-const int kPbSamoleCount = 240;
-const int kPbBlockSize = kPbSamoleCount * (kPbBitDepth / 8) * kPbChannelCount;
+const int kPbSampleCount = 240;
+const int kPbBlockSize = kPbSampleCount * (kPbBitDepth / 8) * kPbChannelCount;
 const int kPbCacheSize = (24 * 1024);
 
 const int kPbBytePerSec = kPbSampleFrq * (kPbBitDepth / 8) * kPbChannelCount;
@@ -88,7 +89,7 @@ SDSink::SDSink(const SDSink::Item *table, size_t table_length)
     : NullFilter(),
       offset_(kDefaultOffset),
       volume_(0),
-      renderer_(kPbSampleFrq, kPbBitDepth, kPbChannelCount, kPbSamoleCount, kPbCacheSize, 1),
+      renderer_(kPbSampleFrq, kPbBitDepth, kPbChannelCount, kPbSampleCount, kPbCacheSize, 1),
       table_index_(-1),
       remain_pcm_size_(0),
       loop_(false) {
@@ -117,6 +118,7 @@ SDSink::~SDSink() {
 }
 
 bool SDSink::begin() {
+    NullFilter::begin();
     bool ok = true;
 
     // setup renderer

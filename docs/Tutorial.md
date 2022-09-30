@@ -1,4 +1,4 @@
-# Sound Signal Processing Library for Spresense
+# Sound Signal Processing Library for Spresense (20220826版)
 
 このライブラリは[Spresense](https://www.sony-semicon.co.jp/products/smart-sensing/spresense/)で簡単に楽器を開発するためのものです。
 電子楽器の演奏データを定めるMIDI規格をベースとしたAPIと、Spresenseのオーディオ入力・オーディオ出力を簡単に扱える機能ブロックを提供します。

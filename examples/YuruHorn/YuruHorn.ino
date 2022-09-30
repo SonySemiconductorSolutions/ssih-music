@@ -11,8 +11,6 @@
 #error "Core selection is wrong!!"
 #endif
 
-#include <MemoryUtil.h>
-
 #include <OctaveShift.h>
 #include <SFZSink.h>
 #include <YuruhornSrc.h>
@@ -32,11 +30,10 @@ void setup() {
     pinMode(LED2, OUTPUT);
     pinMode(LED3, OUTPUT);
 
-    // initialize memory pools and message libs
-    initMemoryPools();
-    createStaticPools(MEM_LAYOUT_RECORDINGPLAYER);
-
     // setup instrument
+    console.registerParam("play_scale", YuruhornSrc::PARAMID_SCALE);
+    console.registerParam("min_note", YuruhornSrc::PARAMID_MIN_NOTE);
+    console.registerParam("max_note", YuruhornSrc::PARAMID_MAX_NOTE);
     console.begin();
     if (!inst.begin()) {
         Serial.println("ERROR: init error.");

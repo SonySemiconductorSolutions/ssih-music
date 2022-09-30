@@ -11,8 +11,6 @@
 #error "Core selection is wrong!!"
 #endif
 
-#include <MemoryUtil.h>
-
 #include <SDSink.h>
 #include <YuruhornSrc.h>
 
@@ -45,10 +43,6 @@ void setup() {
     pinMode(LED1, OUTPUT);
     pinMode(LED2, OUTPUT);
     pinMode(LED3, OUTPUT);
-
-    // initialize memory pool
-    initMemoryPools();
-    createStaticPools(MEM_LAYOUT_RECORDINGPLAYER);
 
     // setup instrument
     inst.setParam(SDSink::PARAMID_LOOP, true);  // enable loop

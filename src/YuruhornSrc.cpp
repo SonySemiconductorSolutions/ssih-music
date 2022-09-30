@@ -359,7 +359,7 @@ void YuruhornSrc::onCapture(unsigned int freq_numer, unsigned int freq_denom, un
     uint8_t note;
 
     input_level_ = volume;
-    digitalWrite(LED2, HIGH);
+    ledOn(LED2);
 
     trace_printf("freq:%d, volume:%d\n", freq_numer * 10 / freq_denom, volume);
     note = getNote(freq_numer * 10 / freq_denom, prev_note_);
@@ -406,7 +406,7 @@ void YuruhornSrc::onCapture(unsigned int freq_numer, unsigned int freq_denom, un
     }
     prev_btn_ = btn;
 
-    digitalWrite(LED2, LOW);
+    ledOff(LED2);
 }
 
 #endif  // ARDUINO_ARCH_SPRESENSE

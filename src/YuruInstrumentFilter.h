@@ -36,38 +36,15 @@ public:
 /// Null of YuruInstrument component
 class NullFilter : public Filter {
 public:
-    NullFilter() {
-    }
-
-    ~NullFilter() {
-    }
-
-    bool begin() override {
-        return true;
-    }
-
-    void update() override {
-    }
-
-    bool isAvailable(int param_id) override {
-        return false;
-    }
-
-    intptr_t getParam(int param_id) override {
-        return 0;
-    }
-
-    bool setParam(int param_id, intptr_t value) override {
-        return false;
-    }
-
-    bool sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) override {
-        return true;
-    }
-
-    bool sendNoteOff(uint8_t note, uint8_t velocity, uint8_t channel) override {
-        return true;
-    }
+    NullFilter();
+    ~NullFilter();
+    bool begin() override;
+    void update() override;
+    bool isAvailable(int param_id) override;
+    intptr_t getParam(int param_id) override;
+    bool setParam(int param_id, intptr_t value) override;
+    bool sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) override;
+    bool sendNoteOff(uint8_t note, uint8_t velocity, uint8_t channel) override;
 };
 
 /// Base class of YuruInstrument component
@@ -76,63 +53,15 @@ protected:
     Filter* next_filter_;
 
 public:
-    BaseFilter(Filter* filter) : next_filter_(filter) {
-    }
-
-    BaseFilter(Filter& filter) : BaseFilter(&filter) {
-    }
-
-    ~BaseFilter() {
-    }
-
-    bool begin() override {
-        if (next_filter_ == nullptr) {
-            return false;
-        }
-        return next_filter_->begin();
-    }
-
-    void update() override {
-        if (next_filter_ == nullptr) {
-            return;
-        }
-        next_filter_->update();
-    }
-
-    bool isAvailable(int param_id) override {
-        if (next_filter_ == nullptr) {
-            return false;
-        }
-        return next_filter_->isAvailable(param_id);
-    }
-
-    intptr_t getParam(int param_id) override {
-        if (next_filter_ == nullptr) {
-            return 0;
-        }
-        return next_filter_->getParam(param_id);
-    }
-
-    bool setParam(int param_id, intptr_t value) override {
-        if (next_filter_ == nullptr) {
-            return false;
-        }
-        return next_filter_->setParam(param_id, value);
-    }
-
-    bool sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) override {
-        if (next_filter_ == nullptr) {
-            return false;
-        }
-        return next_filter_->sendNoteOn(note, velocity, channel);
-    }
-
-    bool sendNoteOff(uint8_t note, uint8_t velocity, uint8_t channel) override {
-        if (next_filter_ == nullptr) {
-            return false;
-        }
-        return next_filter_->sendNoteOff(note, velocity, channel);
-    }
+    BaseFilter(Filter& filter);
+    ~BaseFilter();
+    bool begin() override;
+    void update() override;
+    bool isAvailable(int param_id) override;
+    intptr_t getParam(int param_id) override;
+    bool setParam(int param_id, intptr_t value) override;
+    bool sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) override;
+    bool sendNoteOff(uint8_t note, uint8_t velocity, uint8_t channel) override;
 };
 
 #endif  // YURUINSTRUMENT_FILTER_H_

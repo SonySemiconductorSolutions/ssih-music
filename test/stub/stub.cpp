@@ -1176,6 +1176,14 @@ FrontEnd::~FrontEnd(void) {
 
 //// MemoryUtil.h
 
+int initMemoryPools(void) {
+    return 0;
+}
+
+int createStaticPools(uint8_t layout_no) {
+    return 0;
+}
+
 MemHandle::MemHandle(void) : chunk_(nullptr) {
     chunk_ = new MemHandle::Chunk();
     if (chunk_) {
@@ -1416,6 +1424,11 @@ File StorageClass::open(const String &filepath, uint8_t mode) {
 
 boolean StorageClass::exists(const char *filepath) {
     if (filepath) {
+        for (const auto &e : g_dummy_files) {
+            if (e.path == filepath) {
+                return true;
+            }
+        }
         struct stat st;
         return (::stat(filepath, &st) == 0);
     } else {
@@ -1463,7 +1476,7 @@ boolean StorageClass::mkdir(const char *filepath) {
 }
 
 boolean StorageClass::mkdir(const String &filepath) {
-    return ::mkdir(filepath.c_str());
+    return mkdir(filepath.c_str());
 }
 
 boolean StorageClass::remove(const char *filepath) {

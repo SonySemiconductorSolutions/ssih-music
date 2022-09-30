@@ -13,27 +13,60 @@ GTESTFLAGS = -lgtest -lgtest_main
 
 GCOVFLAGS = --branch-probabilities --branch-counts
 
-YURUHORNSRC_TEST_OBJECTS = yuruhornsrc_test.o stub/stub.o ../src/YuruhornSrc.o ../src/VoiceCapture.o ../src/PcmRenderer.o ../src/WavReader.o
-SCORESRC_TEST_OBJECTS = scoresrc_test.o stub/stub.o ../src/ScoreSrc.o ../src/ScoreReader.o ../src/OneKeySynthesizerFilter.o ../src/WavReader.o
-SDSINK_TEST_OBJECTS = sdsink_test.o stub/stub.o ../src/SDSink.o ../src/PcmRenderer.o ../src/WavReader.o
-SFZSINK_TEST_OBJECTS = sfzsink_test.o stub/stub.o ../src/SFZSink.o ../src/PcmRenderer.o ../src/WavReader.o ../src/SFZParser.o ../src/path_util.o
-SFZSINK_NOTENAME_TEST_OBJECTS = sfzsink_notename_test.o stub/stub.o ../src/SFZSink.o ../src/PcmRenderer.o ../src/WavReader.o ../src/SFZParser.o ../src/path_util.o
-SDSEEKSINK_TEST_OBJECTS = sdseeksink_test.o stub/stub.o ../src/SDSeekSink.o ../src/TarReader.o ../src/PcmRenderer.o ../src/WavReader.o
+ALL_OBJECTS = ../src/BaseFilter.o \
+              ../src/NullFilter.o \
+              ../src/OctaveShift.o \
+              ../src/OneKeySynthesizerFilter.o \
+              ../src/path_util.o \
+              ../src/PcmRenderer.o \
+              ../src/ScoreReader.o \
+              ../src/ScoreSrc.o \
+              ../src/SDSeekSink.o \
+              ../src/SDSink.o \
+              ../src/SFZParser.o \
+              ../src/SFZSink.o \
+              ../src/TarReader.o \
+              ../src/ToneFilter.o \
+              ../src/VoiceCapture.o \
+              ../src/VoiceTriggerSrc.o \
+              ../src/WavReader.o \
+              ../src/YuruhornSrc.o \
+              ../src/YuruInstrumentConfig.o \
+			  stub/stub.o
+
+YURUHORNSRC_TEST_OBJECTS = yuruhornsrc_test.o $(ALL_OBJECTS)
+SCORESRC_TEST_OBJECTS = scoresrc_test.o $(ALL_OBJECTS)
+SDSINK_TEST_OBJECTS = sdsink_test.o $(ALL_OBJECTS)
+SFZSINK_TEST_OBJECTS = sfzsink_test.o $(ALL_OBJECTS)
+SFZSINK_NOTENAME_TEST_OBJECTS = sfzsink_notename_test.o $(ALL_OBJECTS)
+SDSEEKSINK_TEST_OBJECTS = sdseeksink_test.o $(ALL_OBJECTS)
+SFZPARSER_TEST_OBJECTS = sfzparser_test.o $(ALL_OBJECTS)
 
 %PHONY: default
-default: all check
+default: run
 
 %PHONY: all
-all: yuruhornsrc_test.exe scoresrc_test.exe sdsink_test.exe sfzsink_test.exe sfzsink_notename_test.exe sdseeksink_test.exe
+all: yuruhornsrc_test.exe scoresrc_test.exe sdsink_test.exe sfzsink_test.exe sfzsink_notename_test.exe sdseeksink_test.exe sfzparser_test.exe
 
 %PHONY: check
 check: all
+	./yuruhornsrc_test.exe --gtest_output=xml:yuruhornsrc_test.xml
+	./scoresrc_test.exe --gtest_output=xml:scoresrc_test.xml
+	./sdsink_test.exe --gtest_output=xml:sdsink_test.xml
+	./sfzsink_test.exe --gtest_output=xml:sfzsink_test.xml
+	./sfzsink_notename_test.exe --gtest_output=xml:sfzsink_notename_test.xml
+	./sdseeksink_test.exe --gtest_output=xml:sdseeksink_test.xml
+	./sfzparser_test.exe --gtest_filter="SFZParser_A_OK.*" --gtest_output=xml:sfzpaser_test.xml
+
+%PHONY: run
+run: all
 	./yuruhornsrc_test.exe --gtest_output=xml:yuruhornsrc_test.xml || true
 	./scoresrc_test.exe --gtest_output=xml:scoresrc_test.xml || true
 	./sdsink_test.exe --gtest_output=xml:sdsink_test.xml || true
 	./sfzsink_test.exe --gtest_output=xml:sfzsink_test.xml || true
 	./sfzsink_notename_test.exe --gtest_output=xml:sfzsink_notename_test.xml || true
 	./sdseeksink_test.exe --gtest_output=xml:sdseeksink_test.xml || true
+	./sfzparser_test.exe --gtest_filter="SFZParser_A_OK.*" --gtest_output=xml:sfzpaser_test.xml || true
 
 %PHONY: clean
 clean:
@@ -50,15 +83,18 @@ clean:
 	rm -f sfzsink_notename_test.exe
 	rm -f $(SDSEEKSINK_TEST_OBJECTS)
 	rm -f sdseeksink_test.exe
+	rm -f $(SFZPARSER_TEST_OBJECTS)
+	rm -f sfzparser_test.exe
 
 %PHONY: gcov
-gcov: check
+gcov: run
 	gcov $(GCOVFLAGS) yuruhornsrc_test.exe
 	gcov $(GCOVFLAGS) scoresrc_test.exe
 	gcov $(GCOVFLAGS) sdsink_test.exe
-	gcov $(GCOVFLAGS) sfzsink_test.exe
+	gcov $(GCOVFLAGS) sfzsink_test.exe --gtest_filter="-SFZSink.outputtest*"
 	gcov $(GCOVFLAGS) sfzsink_notename_test.exe
 	gcov $(GCOVFLAGS) sdseeksink_test.exe
+	gcov $(GCOVFLAGS) sfzparser_test.exe --gtest_filter="SFZParser_A_OK.*"
 	gcovr --xml-pretty --exclude-unreachable-branches --print-summary -o coverage.xml --root ../YuruHorn
 
 %.o: %.cpp
@@ -80,4 +116,7 @@ sfzsink_notename_test.exe: $(SFZSINK_NOTENAME_TEST_OBJECTS)
 	$(CXX) $(INCLUDES) $(CXXFLAGS) $^ $(GTESTFLAGS) -o $@
 
 sdseeksink_test.exe: $(SDSEEKSINK_TEST_OBJECTS)
+	$(CXX) $(INCLUDES) $(CXXFLAGS) $^ $(GTESTFLAGS) -o $@
+
+sfzparser_test.exe: $(SFZPARSER_TEST_OBJECTS)
 	$(CXX) $(INCLUDES) $(CXXFLAGS) $^ $(GTESTFLAGS) -o $@

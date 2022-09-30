@@ -22,6 +22,9 @@ typedef unsigned int err_t;
 #define ERR_OK (0x00000000)
 #define ERR_NG (0x80000000)
 
+#define ledOn(x) digitalWrite(x, HIGH)
+#define ledOff(x) digitalWrite(x, LOW)
+
 #define abs(x) ((x) > 0 ? (x) : (-x))
 #define constrain(amt, low, high) ((amt) < (low) ? (low) : ((amt) > (high) ? (high) : (amt)))
 
