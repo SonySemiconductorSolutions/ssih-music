@@ -4,8 +4,8 @@
  * Copyright 2022 Sony Semiconductor Solutions Corporation
  */
 
-#ifndef DUMMY_HARDWARESERIAL_H_
-#define DUMMY_HARDWARESERIAL_H_
+#ifndef DUMMY_HARDWARE_SERIAL_H_
+#define DUMMY_HARDWARE_SERIAL_H_
 
 #include <stdio.h>
 
@@ -29,4 +29,4 @@ public:
     virtual size_t write(const uint8_t* buf, size_t len);
 };
 
-#endif  // DUMMY_HARDWARESERIAL_H_
+#endif  // DUMMY_HARDWARE_SERIAL_H_

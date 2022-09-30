@@ -9,8 +9,14 @@
 
 #include <Arduino.h>
 
-String getFolderPath(const String& file_path);
+String getFolderPath(const String& path);
 
-String normalizePath(const String& input_path);
+String getBaseName(const String& path);
+
+String getExtension(const String& path);
+
+bool isHidden(const String& path);
+
+String normalizePath(const String& path);
 
 #endif  // PATH_UTIL_H_

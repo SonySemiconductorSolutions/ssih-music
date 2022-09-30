@@ -4,8 +4,8 @@
  * Copyright 2022 Sony Semiconductor Solutions Corporation
  */
 
-#ifndef TARREADER_H_
-#define TARREADER_H_
+#ifndef TAR_READER_H_
+#define TAR_READER_H_
 
 #include <stddef.h>
 #include <stdint.h>
@@ -55,4 +55,4 @@ private:
     std::vector<Entry> entries_;
 };
 
-#endif  // TARREADER_H_
+#endif  // TAR_READER_H_

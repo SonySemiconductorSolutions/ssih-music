@@ -307,6 +307,7 @@ void SFZParser::parse(File sfz_file, const String& sfz_file_path, SFZHandler* ha
                 header_name = "";
                 state = kExpectHeaderName;
             } else if (ch < 0 || ch == '\r' || ch == '\n') {
+                value.trim();
                 String o = replaceString(opcode, define_names_, define_values_);
                 String v = replaceString(value, define_names_, define_values_);
                 handler->opcode(o, v);

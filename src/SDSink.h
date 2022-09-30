@@ -4,8 +4,8 @@
  * Copyright 2022 Sony Semiconductor Solutions Corporation
  */
 
-#ifndef SDSINK_H_
-#define SDSINK_H_
+#ifndef SD_SINK_H_
+#define SD_SINK_H_
 
 #include <stdint.h>
 
@@ -70,4 +70,4 @@ private:
     bool loop_;
 };
 
-#endif  // SDSINK_H_
+#endif  // SD_SINK_H_

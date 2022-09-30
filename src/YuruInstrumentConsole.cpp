@@ -16,7 +16,7 @@
 #include "YuruInstrumentConfig.h"
 #include "YuruInstrumentFilter.h"
 
-//#define DEBUG
+//#define DEBUG (1)
 
 // clang-format off
 #define nop(...) do {} while (0)
@@ -197,7 +197,7 @@ static int CommandAppend(YuruInstrumentConsole *console, int argc, char *argv[])
                         if (i > 2) {
                             file.write(' ');
                         }
-                        file.write(argv[2], strlen(argv[2]));
+                        file.write((const uint8_t *)argv[2], strlen(argv[2]));
                     }
                     file.write('\n');
                 }

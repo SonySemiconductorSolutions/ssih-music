@@ -9,6 +9,8 @@
 |            |             | (不具合修正) https://github.com/SonySemiconductorSolutions/ssih-music/issues/3: 音声データの供給がされないと異常停止する問題を修正しました。    |
 |            |             | (不具合修正) https://github.com/SonySemiconductorSolutions/ssih-music/issues/4: 一部のSFZファイルのロードができない問題を修正しました。         |
 |            |             | (サンプル) サンプルスケッチにYuruFlaCastanetを追加しました。     |
+| v0.8.0     | 2022-09-30  | (機能追加) MIDIファイルの一時停止に対応しました。                |
+|            |             | (サンプル) サンプルスケッチにYuruFlaShoeを追加しました。         |
 
 ## ライブラリ概要
 

@@ -8,9 +8,9 @@
 
 #include "ScoreSrc.h"
 
-#include <time.h>
-
-#include "ToneFilter.h"
+#include "path_util.h"
+#include "SmfParser.h"
+#include "TextScoreParser.h"
 
 //#define DEBUG (1)
 
@@ -27,59 +27,98 @@
 #define error_printf printf
 #endif  // if defined(DEBUG)
 
-enum PlayState {
-    kStaying = 0,
-    kPlaying,
-    kResting,
-};
+static const char kClassName[] = "ScoreSrc";
+
+const int kDefaultTick = 960;
+const int kDefaultTempo = (int)60000000 / 120;
+
+enum ScoreFileType { kScoreFileTypeTxt = 0, kScoreFileTypeMidi, kScoreFileTypeOthers, kScoreFileTypeHidden };
+
+static ScoreFileType getFileType(const String& path) {
+    if (isHidden(path)) {
+        return kScoreFileTypeHidden;
+    }
+    String ext = getExtension(path);
+    ext.toLowerCase();
+    if (ext == ".mid" || ext == ".midi") {
+        return kScoreFileTypeMidi;
+    } else if (ext == ".txt") {
+        return kScoreFileTypeTxt;
+    } else {
+        return kScoreFileTypeOthers;
+    }
+}
 
 // others getter setter
-void ScoreSrc::setScore(unsigned int new_score_num) {
-    score_num_ = constrain(new_score_num, 0, (scores_.size() - 1));
-    selectScore(score_num_);
-    is_music_start_ = true;
+void ScoreSrc::setScore(int score_id) {
+    if (parser_ == nullptr) {
+        error_printf("[%s::%s] error: parser isnot available\n", kClassName, __func__);
+        return;
+    }
+    if (parser_->getNumberOfScores() == 0) {
+        error_printf("[%s::%s] error: cannot find track\n", kClassName, __func__);
+        return;
+    }
+    if (0 <= score_id && score_id < parser_->getNumberOfScores()) {
+        score_num_ = score_id;
+        selectScore(score_num_);
+    }
 }
 
 int ScoreSrc::getScoreNum() {
-    return constrain(score_num_, 0, (scores_.size() - 1));
+    if (parser_ == nullptr) {
+        error_printf("[%s::%s] error: parser isnot available\n", kClassName, __func__);
+        return -1;
+    }
+    if (parser_->getNumberOfScores() == 0) {
+        error_printf("[%s::%s] error: not play track\n", kClassName, __func__);
+        return -1;
+    }
+    if (0 <= score_num_ && score_num_ < parser_->getNumberOfScores()) {
+        return score_num_;
+    }
+    return -1;
 }
 
-ScoreSrc::ScoreSrc(const String& file_name, Filter& filter)
+ScoreSrc::ScoreSrc(const String& file_name, Filter& filter) : ScoreSrc(file_name, false, filter) {
+}
+
+ScoreSrc::ScoreSrc(const String& file_name, bool auto_start, Filter& filter)
     : BaseFilter(filter),
+      directory_name_(file_name),
       score_num_(0),
-      prev_note_(INVALID_NOTE_NUMBER),
-      bpm_(0),
-      now_rhythm_(0),
-      beat_ms_(0),
-      triplets_beat_ms_(0),
-      note_interval_(0),
-      play_state_(kStaying),
-      play_start_(0),
-      play_end_(0),
-      is_music_start_(true),
-      note_(ScoreReader::Note()),
-      is_waiting_(false) {
-    sr_ = new ScoreReader(file_name);
-    scores_ = sr_->getScoresData();
-}
-
-ScoreSrc::ScoreSrc(Filter& filter) : ScoreSrc("SCORE", filter) {
+      root_tick_(kDefaultTick),
+      now_tempo_(kDefaultTempo),
+      duration_(0),
+      play_state_(auto_start ? ScoreSrc::PLAYING : ScoreSrc::PAUSE),
+      default_state_(auto_start ? ScoreSrc::PLAYING : ScoreSrc::PAUSE),
+      schedule_time_(0),
+      midi_message_(),
+      is_waiting_(false),
+      is_music_start_(false) {
 }
 
 ScoreSrc::~ScoreSrc() {
-    delete sr_;
+    if (parser_) {
+        delete parser_;
+        parser_ = nullptr;
+    }
 }
 
 bool ScoreSrc::setParam(int param_id, intptr_t value) {
+    trace_printf("[%s::%s] id:%d, value:%d, (target:%d)\n", kClassName, __func__, param_id, (int)value, ScoreSrc::PARAMID_STATUS);
     if (param_id == ScoreSrc::PARAMID_NUMBER_OF_SCORES) {
         return false;
-    } else if (param_id == ScoreSrc::PARAMID_PLAYING_SCORE) {
-        setScore((unsigned int)value);
+    } else if (param_id == ScoreSrc::PARAMID_SCORE) {
+        setScore((int)value);
         return true;
-    } else if (param_id == ScoreSrc::PARAMID_PLAYING_SCORE_NAME) {
+    } else if (param_id == ScoreSrc::PARAMID_SCORE_NAME) {
         return false;
-    } else if (ScoreSrc::PARAMID_SCORE_NAME <= param_id && param_id < (ScoreSrc::PARAMID_SCORE_NAME + (int)scores_.size())) {
-        return false;
+    } else if (param_id == ScoreSrc::PARAMID_STATUS) {
+        if (!(play_state_ == ScoreSrc::END_SCORE)) {
+            play_state_ = value;
+        }
+        return true;
     } else {
         return BaseFilter::setParam(param_id, value);
     }
@@ -88,22 +127,23 @@ bool ScoreSrc::setParam(int param_id, intptr_t value) {
 intptr_t ScoreSrc::getParam(int param_id) {
     static char error_message[] = "Score Not Found";
     if (param_id == ScoreSrc::PARAMID_NUMBER_OF_SCORES) {
-        return scores_.size();
-    } else if (param_id == ScoreSrc::PARAMID_PLAYING_SCORE) {
+        if (parser_ == nullptr) {
+            return 0;
+        } else {
+            return parser_->getNumberOfScores();
+        }
+    } else if (param_id == ScoreSrc::PARAMID_SCORE) {
         return getScoreNum();
-    } else if (param_id == ScoreSrc::PARAMID_PLAYING_SCORE_NAME) {
-        if (scores_.size() != 0) {
-            return (intptr_t)scores_[getScoreNum()].title.c_str();
+    } else if (param_id == ScoreSrc::PARAMID_SCORE_NAME) {
+        if (parser_ == nullptr) {
+            return (intptr_t)error_message;
+        } else if (parser_->getNumberOfScores() > 0) {
+            return (intptr_t)parser_->getFileName().c_str();
         } else {
             return (intptr_t)error_message;
         }
-    } else if (ScoreSrc::PARAMID_SCORE_NAME <= param_id && param_id < (ScoreSrc::PARAMID_SCORE_NAME + (int)scores_.size())) {
-        size_t index = param_id - ScoreSrc::PARAMID_SCORE_NAME;
-        if (index < scores_.size()) {
-            return (intptr_t)scores_[index].title.c_str();
-        } else {
-            return (intptr_t)error_message;
-        }
+    } else if (param_id == ScoreSrc::PARAMID_STATUS) {
+        return play_state_;
     } else {
         return BaseFilter::getParam(param_id);
     }
@@ -112,217 +152,201 @@ intptr_t ScoreSrc::getParam(int param_id) {
 bool ScoreSrc::isAvailable(int param_id) {
     if (param_id == ScoreSrc::PARAMID_NUMBER_OF_SCORES) {
         return true;
-    } else if (param_id == ScoreSrc::PARAMID_PLAYING_SCORE) {
+    } else if (param_id == ScoreSrc::PARAMID_SCORE) {
         return true;
-    } else if (param_id == ScoreSrc::PARAMID_PLAYING_SCORE_NAME) {
+    } else if (param_id == ScoreSrc::PARAMID_SCORE_NAME) {
         return true;
-    } else if (ScoreSrc::PARAMID_SCORE_NAME <= param_id && param_id < (ScoreSrc::PARAMID_SCORE_NAME + (int)scores_.size())) {
-        size_t index = param_id - ScoreSrc::PARAMID_SCORE_NAME;
-        if (index < scores_.size()) {
-            return true;
-        } else {
-            return false;
-        }
+    } else if (param_id == ScoreSrc::PARAMID_STATUS) {
+        return true;
     } else {
         return BaseFilter::isAvailable(param_id);
     }
 }
 
-void ScoreSrc::selectScore(int id) {
-    // sr_->printScoresData(scores_);
-    sr_->load(scores_[id]);
-    if (sr_->isMidiFile()) {
-        bpm_ = scores_[id].bpm;
-        now_rhythm_ = scores_[id].rhythm;
-        debug_printf("ScoreSrc: load midi\n");
-    } else {
-        setBpm(scores_[id].bpm);
-        setRhythm(scores_[id].rhythm);
-        debug_printf("ScoreSrc: load txt\n");
+//楽譜一覧解析
+bool ScoreSrc::readDirectoryScores(const String& dir_name) {
+    SDClass sd;
+    //ファイルオープン
+    if (!sd.begin()) {
+        error_printf("[%s::%s] SD: %s begin error.\n", kClassName, __func__, dir_name.c_str());
+        return false;
+    }
+    File dir = sd.open(dir_name.c_str());
+    if (!dir) {  //ファイル読み込み(失敗)
+        error_printf("[%s::%s] SD: %s open error.\n", kClassName, __func__, dir_name.c_str());
+        return false;
     }
 
-    if (BaseFilter::isAvailable(ToneFilter::PARAMID_TONE)) {
-        setParam(ToneFilter::PARAMID_TONE, scores_[id].tone);
+    debug_printf("[%s::%s] SD: %s open success.\n", kClassName, __func__, dir_name.c_str());
+    if (dir.isDirectory()) {  // 対象がディレクトリの場合
+        debug_printf("[%s::%s] (Directory)\n", kClassName, __func__);
+        while (true) {
+            File file = dir.openNextFile();
+            file.setTimeout(0);
+            //ファイルの読み込み確認
+            if (!file) {
+                break;
+            }
+            if (file.isDirectory()) {  //取得したファイルがディレクトリの場合は無視する
+                file.close();
+                continue;
+            }
+            readScore(file);
+            file.close();
+        }
+    } else {  //対象がファイルの場合
+        debug_printf("[%s::%s] (file)\n", kClassName, __func__);
+        dir.setTimeout(0);
+        readScore(dir);
+        dir.close();
     }
-    trace_printf("ScoreSrc: set score:%d name:%s\n", id, scores_[id].title.c_str());
+
+    return true;
+}
+
+bool ScoreSrc::readScore(File& file) {
+    debug_printf("[%s::%s] SD: file:%s open success.\n", kClassName, __func__, file.name());
+    if (parser_) {
+        delete parser_;
+        parser_ = nullptr;
+    }
+    ScoreFileType type = getFileType(file.name());
+    if (type == kScoreFileTypeMidi) {
+        parser_ = new SmfParser(file.name());
+        return true;
+    } else if (type == kScoreFileTypeTxt) {
+        parser_ = new TextScoreParser(file.name());
+        return true;
+    }
+    error_printf("[%s::%s] SD: file:%s This file is not supported.\n", kClassName, __func__, file.name());
+    return false;
+}
+
+void ScoreSrc::selectScore(int id) {
+    if (parser_ == nullptr) {
+        error_printf("[%s::%s] error: parser isnot available\n", kClassName, __func__);
+        return;
+    } else if (parser_->getNumberOfScores() == 0) {
+        error_printf("[%s::%s] error: cannot find playable track\n", kClassName, __func__);
+        return;
+    } else if (!(0 <= id && id < parser_->getNumberOfScores())) {
+        error_printf("[%s::%s] error: out of track number (%d/%d)\n", kClassName, __func__, id, parser_->getNumberOfScores());
+        return;
+    }
+    parser_->loadScore(id);
+
+    root_tick_ = parser_->getRootTick();
+    play_state_ = default_state_;  //楽譜再生終了状態からの復帰用
+    trace_printf("[%s::%s] root_tick_:%d\n", kClassName, __func__, root_tick_);
+    is_music_start_ = true;
+    memset(&playing_midi_message_, 0x00, sizeof(playing_midi_message_));
+    memset(&midi_message_, 0x00, sizeof(midi_message_));
+    schedule_time_ = 0;
+    duration_ = 0;
+    is_waiting_ = false;
 }
 
 bool ScoreSrc::begin() {
-    if (scores_.size() != 0) {
+    readDirectoryScores(directory_name_);
+    if (parser_ == nullptr) {
+        error_printf("[%s::%s] error: parser isnot available\n", kClassName, __func__);
+    } else if (parser_->getNumberOfScores() > 0) {
         selectScore(getScoreNum());
     } else {
-        error_printf("ScoreSrc: ERROR: Score not found.\n");
+        error_printf("[%s::%s] error: Score not found.\n", kClassName, __func__);
     }
 
     return BaseFilter::begin();
 }
 
 void ScoreSrc::update() {
-    if (scores_.size() != 0) {
-        if (sr_->isMidiFile()) {
-            playNoteMidi();
-        } else {
-            playNoteTxt();
+    if (play_state_ == ScoreSrc::END_SCORE) {
+        return;
+    }
+    if (is_music_start_) {
+        schedule_time_ = millis();
+        is_music_start_ = false;
+    }
+    if (parser_ != nullptr) {
+        if (!is_waiting_) {
+            parser_->getMidiMessage(&midi_message_);
+            debug_printf("[%s::%s] delta_time:%d, ", kClassName, __func__, midi_message_.delta_time);
+            debug_printf("status_byte:%02x, data_byte1:%02x, data_byte2:%02x, ", midi_message_.status_byte, midi_message_.data_byte1, midi_message_.data_byte2);
+            debug_printf("event_code:%02x, event_length:%02x\n", midi_message_.event_code, midi_message_.event_length);
+            duration_ = (unsigned long)(((midi_message_.delta_time * now_tempo_) / root_tick_) / 1000);
+            schedule_time_ += duration_;
+            is_waiting_ = true;
+        }
+
+        if (default_state_ != play_state_) {
+            trace_printf("[%s::%s] old stat:%d, now stat:%d\n", kClassName, __func__, default_state_, play_state_);
+            if (play_state_ == ScoreSrc::PAUSE) {
+                duration_ = schedule_time_ - millis();  //残時間の取得
+                sendNoteOff(playing_midi_message_.data_byte1, playing_midi_message_.data_byte2, playing_midi_message_.status_byte & 0x0f);
+            } else if (play_state_ == ScoreSrc::PLAYING) {
+                schedule_time_ = millis() + duration_;  //残時間の再生開始
+            }
+            default_state_ = play_state_;
+        } else if (schedule_time_ <= millis() && play_state_ == PLAYING) {
+            if (midi_message_.status_byte == ScoreParser::kMetaEvent) {  // メタイベントの処理
+                executeMetaEvent(midi_message_);
+            } else if (midi_message_.status_byte == ScoreParser::kSysExEvent) {  // SysExイベントの処理
+                // executeSysExEvent();
+            } else {  // MIDIイベントの処理
+                executeMIDIEvent(midi_message_);
+            }
+
+            memset(&midi_message_, 0x00, sizeof(midi_message_));
+            is_waiting_ = false;
         }
     }
     BaseFilter::update();
 }
 
-bool ScoreSrc::playNoteMidi() {
-    if (!is_waiting_) {
-        note_ = sr_->getNote();
-        trace_printf("ScoreSrc: dt:%d nn:%d ve:%02x ch:%d\n", note_.delta_time, note_.note_num, note_.velocity, note_.ch);
-        note_interval_ = sr_->calcDeltaTime(bpm_, note_.delta_time, now_rhythm_);
-        play_end_ = millis() + note_interval_;
-        trace_printf("ScoreSrc: intarval:%lu, end:%lu\n", note_interval_, play_end_);
-        is_waiting_ = true;
-    }
-
-    if (play_end_ <= millis()) {
-        if (note_.note_num == ScoreReader::Command::kCommandRhythmChange) {
-            now_rhythm_ = note_.velocity;
-        } else if (NOTE_NUMBER_MIN <= note_.note_num && note_.note_num <= NOTE_NUMBER_MAX) {
-            if (note_.velocity == 0) {
-                sendNoteOff(note_.note_num, note_.velocity, note_.ch);
-            } else {
-                sendNoteOn(note_.note_num, note_.velocity, note_.ch);
-            }
+bool ScoreSrc::executeMetaEvent(const ScoreParser::MidiMessage& midi_message) {
+    int data = 0;                                             //他のメタイベント対応する場合にも使いまわしたい
+    if (midi_message.event_code == ScoreParser::kSetTempo) {  //テンポ変更
+        for (unsigned int i = 0; i < midi_message.event_length; i++) {
+            data = data << 8;
+            data += midi_message.sysex_array[i];
         }
-        is_waiting_ = false;
-    }
-
-    return true;
-}
-
-bool ScoreSrc::playNoteTxt() {
-    bool note_fin = false;          //ノートの再生が終了したかを返す
-    if (play_state_ == kStaying) {  //ノート受付可能状態
-        ScoreReader::Note note = sr_->getNote();
-        trace_printf("ScoreSrc: dt:%d nn:%d ve:%02x ch:%d\n", note.delta_time, note.note_num, note.velocity, note.ch);
-        debug_printf("ScoreSrc: playNote NUM:%d\n", note.note_num);
-
-        if ((NOTE_NUMBER_MIN <= note.note_num && note.note_num <= NOTE_NUMBER_MAX) || note.note_num == INVALID_NOTE_NUMBER) {
-            if (is_music_start_) {  //ここはフラグの方が適切(曲切り替えの対応が必要)
-                play_start_ = millis();
-                is_music_start_ = false;
-                trace_printf("ScoreSrc: start:%d\n", play_start_);
-            } else {
-                play_start_ = play_end_;
-            }
-        }
-        if (note.note_num == INVALID_NOTE_NUMBER) {  //休符
-            sendNoteOff(prev_note_, DEFAULT_VELOCITY, DEFAULT_CHANNEL);
-            play_state_ = kResting;                                                         //休符実行中状態へ変更
-        } else if (NOTE_NUMBER_MIN <= note.note_num && note.note_num <= NOTE_NUMBER_MAX) {  //有効ノート
-            if (prev_note_ != note.note_num) {
-                sendNoteOff(prev_note_, DEFAULT_VELOCITY, DEFAULT_CHANNEL);
-                sendNoteOn(note.note_num, DEFAULT_VELOCITY, DEFAULT_CHANNEL);
-            }
-            play_state_ = kPlaying;                                                                               //ノート再生中状態へ変更
-        } else if (ScoreReader::kCommandNumMin < note.note_num && note.note_num < ScoreReader::kCommandNumMax) {  //特殊ノート等
-            executeCommand(note);
-            return true;
-        } else {
-            trace_printf("ScoreSrc: ERROR\n");
-            note_fin = true;
-        }
-        prev_note_ = note.note_num;
-
-        play_end_ = play_start_ + note_interval_;
-
-        trace_printf("ScoreSrc: start:%d, end:%d, sendnote:%d\n", play_start_, play_end_);
-
-    } else if (play_state_ == kResting || play_state_ == kPlaying) {  //休符実行中状態
-        if (play_end_ <= millis()) {
-            play_state_ = kStaying;
-            note_fin = true;
-        }
-    }
-    return note_fin;
-}
-
-bool ScoreSrc::executeCommand(ScoreReader::Note note) {
-    if (note.note_num == ScoreReader::kCommandRhythmChange) {
-        setRhythm(note.velocity);
-    } else if (note.note_num == ScoreReader::kCommandToneChange) {
-        if (BaseFilter::isAvailable(ToneFilter::PARAMID_TONE)) {
-            setParam(ToneFilter::PARAMID_TONE, note.velocity);
-        }
-    } else if (note.note_num == ScoreReader::kCommandBpmChange) {
-        setBpm(note.velocity);
-    } else if (note.note_num == ScoreReader::kCommandDelay) {
-        sendNoteOff(prev_note_, DEFAULT_VELOCITY, DEFAULT_CHANNEL);  // velocity
-        play_end_ = play_start_ + note.velocity;
-        play_state_ = kResting;
-    } else if (note.note_num == ScoreReader::kCommandScoreEnd) {
-        sendNoteOff(prev_note_, DEFAULT_VELOCITY, DEFAULT_CHANNEL);  // velocity
-        play_state_ = kResting;
+        now_tempo_ = data;
+    } else if (midi_message.event_code == ScoreParser::kEndOfTrack) {  //楽譜終了
+        play_state_ = ScoreSrc::END_SCORE;
+    } else if (midi_message.event_code < 0x80) {
+        debug_printf("[%s::%s] %02x is unused Meta event.\n", kClassName, __func__, midi_message.event_code);
     } else {
-        trace_printf("ScoreSrc: ERROR\n");
+        error_printf("[%s::%s] error: This Meta event is not supported.\n", kClassName, __func__);
         return false;
     }
     return true;
 }
 
-// timing function
-bool ScoreSrc::updateNoteInterval() {
-    switch (now_rhythm_) {
-        case ScoreReader::kRhythmNormal:
-            note_interval_ = beat_ms_;
-            trace_printf("ScoreSrc: NORMAL(16 NOTE) RHYTHM:%d\n", note_interval_);
-            break;
-        case ScoreReader::kRhythm8Note:
-            note_interval_ = beat_ms_ * 2;
-            trace_printf("ScoreSrc: 8_NOTE RHYTHM:%d\n", note_interval_);
-            break;
-        case ScoreReader::kRhythm4Note:
-            note_interval_ = beat_ms_ * 4;
-            trace_printf("ScoreSrc: 4_NOTE RHYTHM:%d\n", note_interval_);
-            break;
-        case ScoreReader::kRhythm1NoteTriplets:
-            note_interval_ = triplets_beat_ms_ * 8;
-            trace_printf("ScoreSrc: 2 NOTE TRIPLETS RHYTHM:%d\n", note_interval_);
-            break;
-        case ScoreReader::kRhythm2NoteTriplets:
-            note_interval_ = triplets_beat_ms_ * 4;
-            trace_printf("ScoreSrc: 4 NOTE TRIPLETS RHYTHM:%d\n", note_interval_);
-            break;
-        case ScoreReader::kRhythm4NoteTriplets:
-            note_interval_ = triplets_beat_ms_ * 2;
-            trace_printf("ScoreSrc: 8 NOTE TRIPLETS RHYTHM:%d\n", note_interval_);
-            break;
-        case ScoreReader::kRhythm8NoteTriplets:
-            note_interval_ = triplets_beat_ms_;
-            trace_printf("ScoreSrc: 16 NOTE TRIPLETS RHYTHM:%d\n", note_interval_);
-            break;
+bool ScoreSrc::executeMIDIEvent(const ScoreParser::MidiMessage& midi_message) {
+    uint8_t status = midi_message.status_byte & 0xf0;
+    uint8_t ch = midi_message.status_byte & 0x0f;
+    if (status == ScoreParser::kNoteOff) {  // Note off
+        sendNoteOff(midi_message.data_byte1, midi_message.data_byte2, ch);
+        playing_midi_message_ = midi_message_;
+    } else if (status == ScoreParser::kNoteOn) {  // Note on
+        if (midi_message.data_byte2 == 0) {       // velocity = 0
+            sendNoteOff(midi_message.data_byte1, midi_message.data_byte2, ch);
+        } else {
+            sendNoteOn(midi_message.data_byte1, midi_message.data_byte2, ch);
+        }
+        playing_midi_message_ = midi_message_;
+    } else if (status == ScoreParser::kPolyphonicKeyPressure) {  // Polyphonic Key Pressure
+        debug_printf("[%s::%s] Polyphonic Key Pressure is unused Meta event.\n", kClassName, __func__);
+    } else if (status == ScoreParser::kControlChange) {  // Control Change
+        debug_printf("[%s::%s] Control Change is unused Meta event.\n", kClassName, __func__);
+    } else if (status == ScoreParser::kProgramChange) {  // Program Change
+        debug_printf("[%s::%s] Program Change is unused Meta event.\n", kClassName, __func__);
+    } else if (status == ScoreParser::kChannelPressure) {  // Channel Pressure
+        debug_printf("[%s::%s] Channel Pressure is unused Meta event.\n", kClassName, __func__);
+    } else if (status == ScoreParser::kPitchBendChange) {  // Pitch Bend Change
+        debug_printf("[%s::%s] Pitch Bend Change is unused Meta event.\n", kClassName, __func__);
     }
     return true;
-}
-
-void ScoreSrc::setRhythm(int new_rhythm) {
-    now_rhythm_ = new_rhythm;
-    updateNoteInterval();
-}
-
-void ScoreSrc::calcNoteInterval() {
-    beat_ms_ = (int)(60000 / bpm_);
-    beat_ms_ = beat_ms_ / 4;  // 16分音符の時間
-
-    triplets_beat_ms_ = (beat_ms_ * 2) / 3;  //半拍3連 (24分音符)
-
-    updateNoteInterval();
-}
-
-void ScoreSrc::setBpm(int new_bpm) {
-    bpm_ = new_bpm;
-    calcNoteInterval();
-
-    trace_printf("ScoreSrc: BPM = %d\n", bpm_);
-    trace_printf("ScoreSrc: 1 Beat milliseconds = %d\n", beat_ms_);
-    trace_printf("ScoreSrc: 4拍3連 = %d, ", triplets_beat_ms_ * 8);
-    trace_printf("ScoreSrc: 2拍3連 = %d, ", triplets_beat_ms_ * 4);
-    trace_printf("ScoreSrc: 1拍3連 = %d, ", triplets_beat_ms_ * 2);
-    trace_printf("ScoreSrc: 1/2拍3連 = %d\n", triplets_beat_ms_);
 }
 
 #endif  // ARDUINO_ARCH_SPRESENSE

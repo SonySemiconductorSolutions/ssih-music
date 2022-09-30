@@ -4,8 +4,8 @@
  * Copyright 2022 Sony Semiconductor Solutions Corporation
  */
 
-#ifndef RINGBUFF_H_
-#define RINGBUFF_H_
+#ifndef RING_BUFF_H_
+#define RING_BUFF_H_
 
 class RingBuff {
 public:
@@ -90,4 +90,4 @@ private:
     q15_t *rptr_;
 };
 
-#endif //RINGBUFF_H_
+#endif //RING_BUFF_H_
