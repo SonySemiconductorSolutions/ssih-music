@@ -8,13 +8,14 @@
 
 #include "SFZSink.h"
 
+#include <errno.h>
+#include <limits.h>
 #include <stdint.h>
 
 #include <vector>
 
 #include <Arduino.h>
 
-#include <MemoryUtil.h>
 #include <SDHCI.h>
 
 // #define DEBUG (1)
@@ -41,6 +42,7 @@ struct OpcodeSpec {
 };
 
 // playback parameters
+// NOTICE: PcmRenderer only supports 48kHz/16bit/2ch. Otherwise, it will not work.
 const int kPbSampleFrq = 48000;
 const int kPbBitDepth = 16;
 const int kPbChannelCount = 2;
@@ -109,12 +111,15 @@ static bool parseUint32(const String& str, uint32_t* out) {
     if (!isDigit(*strptr)) {
         return false;
     }
-    *out = uint32_t{strtoul(strptr, &endptr, 0)};
-    if (*out == ULONG_MAX && errno == ERANGE) {
+    unsigned long val = strtoul(strptr, &endptr, 0);
+    if (val == ULONG_MAX && errno == ERANGE) {
         return false;
     }
     if (endptr != nullptr && endptr != strptr && *endptr == '\0') {
-        return true;
+        if (0 <= val && val <= UINT32_MAX) {
+            *out = uint32_t(val);
+            return true;
+        }
     }
     return false;
 }
@@ -125,12 +130,15 @@ static bool parseInt32(const String& str, int32_t* out) {
     if (out == nullptr) {
         return false;
     }
-    *out = int32_t{strtol(strptr, &endptr, 0)};
-    if ((*out == LONG_MIN || *out == LONG_MAX) && errno == ERANGE) {
+    long val = strtol(strptr, &endptr, 0);
+    if ((val == LONG_MIN || val == LONG_MAX) && errno == ERANGE) {
         return false;
     }
     if (endptr != nullptr && endptr != strptr && *endptr == '\0') {
-        return true;
+        if (INT32_MIN <= val && val <= INT32_MAX) {
+            *out = int32_t(val);
+            return true;
+        }
     }
     return false;
 }
@@ -192,14 +200,22 @@ static SFZSink::Region buildRegion(const SFZSink::OpcodeContainer& container) {
     }
     region.silence = container.silence;
 
+    size_t pcm_samples = region.pcm_size / kSampleSize;
+
     region.lokey = container.opcode[SFZSink::kOpcodeLokey];
     region.hikey = container.opcode[SFZSink::kOpcodeHikey];
     region.sw_last = container.opcode[SFZSink::kOpcodeSwLast];
-    region.offset = region.pcm_offset + container.opcode[SFZSink::kOpcodeOffset] * kSampleSize;
-    if (container.specified & (1U << SFZSink::kOpcodeEnd)) {
-        region.end = region.pcm_offset + (container.opcode[SFZSink::kOpcodeEnd] + 1) * kSampleSize;
+    size_t offset_samples = (pcm_samples < container.opcode[SFZSink::kOpcodeOffset]) ? pcm_samples : container.opcode[SFZSink::kOpcodeOffset];
+    region.offset = region.pcm_offset + offset_samples * kSampleSize;
+    if (pcm_samples > 0) {
+        if (container.specified & (1U << SFZSink::kOpcodeEnd)) {
+            size_t end_samples = (pcm_samples - 1 < container.opcode[SFZSink::kOpcodeEnd]) ? pcm_samples - 1 : container.opcode[SFZSink::kOpcodeEnd];
+            region.end = region.pcm_offset + (end_samples + 1) * kSampleSize;
+        } else {
+            region.end = region.pcm_offset + region.pcm_size;
+        }
     } else {
-        region.end = region.pcm_offset + region.pcm_size;
+        region.end = 0;
     }
     region.count = container.opcode[SFZSink::kOpcodeCount];
     if (container.specified & (1U << SFZSink::kOpcodeCount)) {
@@ -207,20 +223,21 @@ static SFZSink::Region buildRegion(const SFZSink::OpcodeContainer& container) {
     } else {
         region.loop_mode = (SFZSink::LoopMode)container.opcode[SFZSink::kOpcodeLoopMode];
     }
-    region.loop_start = region.pcm_offset + container.opcode[SFZSink::kOpcodeLoopStart] * kSampleSize;
+    size_t loop_start_samples = (pcm_samples < container.opcode[SFZSink::kOpcodeLoopStart]) ? pcm_samples : container.opcode[SFZSink::kOpcodeLoopStart];
+    region.loop_start = region.pcm_offset + loop_start_samples * kSampleSize;
     region.loop_start = (region.offset > region.loop_start) ? region.offset : region.loop_start;
-    if (container.specified & (1U << SFZSink::kOpcodeLoopEnd)) {
-        region.loop_end = region.pcm_offset + (container.opcode[SFZSink::kOpcodeLoopEnd] + 1) * kSampleSize;
+    if (pcm_samples > 0) {
+        if (container.specified & (1U << SFZSink::kOpcodeLoopEnd)) {
+            size_t loop_end_samples =
+                (pcm_samples - 1 < container.opcode[SFZSink::kOpcodeLoopEnd]) ? pcm_samples - 1 : container.opcode[SFZSink::kOpcodeLoopEnd];
+            region.loop_end = region.pcm_offset + (loop_end_samples + 1) * kSampleSize;
+        } else {
+            region.loop_end = region.pcm_offset + region.pcm_size;
+        }
     } else {
-        region.loop_end = region.pcm_offset + region.pcm_size;
+        region.loop_end = 0;
     }
     region.loop_end = (region.end < region.loop_end) ? region.end : region.loop_end;
-
-    uint32_t pcm_end = region.pcm_offset + region.pcm_size;
-    region.offset = (region.offset < pcm_end) ? region.offset : pcm_end;
-    region.end = (region.end < pcm_end) ? region.end : pcm_end;
-    region.loop_start = (region.loop_start < pcm_end) ? region.loop_start : pcm_end;
-    region.loop_end = (region.loop_end < pcm_end) ? region.loop_end : pcm_end;
 
     return region;
 }
@@ -278,6 +295,7 @@ SFZSink::~SFZSink() {
 }
 
 bool SFZSink::begin() {
+    NullFilter::begin();
     debug_printf("start playback\n");
     renderer_.setState(PcmRenderer::kStateReady);
     renderer_.begin();
@@ -291,6 +309,7 @@ bool SFZSink::begin() {
 }
 
 void SFZSink::update() {
+    NullFilter::update();
     loadSound(kLoadFrameNum);
 }
 

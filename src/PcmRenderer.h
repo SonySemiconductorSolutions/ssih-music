@@ -45,6 +45,8 @@ private:
     int bit_depth_;
     int channels_;
     int samples_per_frame_;
+    unsigned long request_count_;
+    unsigned long response_count_;
 
     // cache buffer
     unsigned int frames_;

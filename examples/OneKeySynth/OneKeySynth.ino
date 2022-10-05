@@ -11,8 +11,6 @@
 #error "Core selection is wrong!!"
 #endif
 
-#include <MemoryUtil.h>
-
 #include <OneKeySynthesizerFilter.h>
 #include <SFZSink.h>
 
@@ -33,10 +31,6 @@ void setup() {
     // init buttons
     pinMode(PIN_D04, INPUT_PULLUP);
     pinMode(PIN_D05, INPUT_PULLUP);
-
-    // initialize memory pool
-    initMemoryPools();
-    createStaticPools(MEM_LAYOUT_RECORDINGPLAYER);
 
     // setup instrument
     if (!inst.begin()) {

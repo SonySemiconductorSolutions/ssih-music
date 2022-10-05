@@ -11,8 +11,6 @@
 #error "Core selection is wrong!!"
 #endif
 
-#include <MemoryUtil.h>
-
 #include <CorrectToneFilter.h>
 #include <SFZSink.h>
 #include <VoiceTriggerSrc.h>
@@ -28,10 +26,6 @@ void setup() {
     pinMode(LED1, OUTPUT);
     pinMode(LED2, OUTPUT);
     pinMode(LED3, OUTPUT);
-
-    // initialize memory pool
-    initMemoryPools();
-    createStaticPools(MEM_LAYOUT_RECORDINGPLAYER);
 
     // setup instrument
     if (!inst.begin()) {

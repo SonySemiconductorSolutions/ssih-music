@@ -233,7 +233,7 @@ void VoiceCapture::onFrontendDone(AsPcmDataParam param) {
     static uint8_t buffer[CAP_BLK_SIZE];   //< referenced from SubCore
     static VoiceCapture::Capture capture;  //< referenced from SubCore
 
-    digitalWrite(LED0, HIGH);
+    ledOn(LED0);
 
     if (param.size == CAP_BLK_SIZE) {
         memcpy(buffer, param.mh.getPa(), param.size);
@@ -290,7 +290,7 @@ void VoiceCapture::onFrontendDone(AsPcmDataParam param) {
         }
     }
 
-    digitalWrite(LED0, LOW);
+    ledOff(LED0);
 }
 
 #endif  // ARDUINO_ARCH_SPRESENSE

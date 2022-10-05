@@ -7,15 +7,12 @@
 #ifndef YURUINSTRUMENTCONSOLE_H_
 #define YURUINSTRUMENTCONSOLE_H_
 
-#include "YuruInstrumentFilter.h"
+#include "YuruInstrumentConfig.h"
 
-class YuruInstrumentConsole {
+class YuruInstrumentConsole : public YuruInstrumentConfig {
 public:
-    YuruInstrumentConsole(Filter *filter);
     YuruInstrumentConsole(Filter &filter);
     ~YuruInstrumentConsole();
-
-    Filter *getFilter();
 
     void begin();
     void poll();
@@ -23,7 +20,6 @@ public:
     void execute(char *line, int length);
 
 private:
-    Filter *filter_;
     size_t line_length_;
     char *line_buffer_;
     size_t line_index_;

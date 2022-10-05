@@ -24,5 +24,3 @@ TEST(Wave, test) {
 
     printf("music data start:%d Byte\nmusic data length:%d\n", wd.pos, wd.size);
 }
-
-
