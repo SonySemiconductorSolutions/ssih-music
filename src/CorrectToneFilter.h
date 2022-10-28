@@ -7,14 +7,14 @@
 #ifndef CORRECT_TONE_FILTER_H_
 #define CORRECT_TONE_FILTER_H_
 
-#include <time.h>
-
-#include "ScoreReader.h"
+#include "ScoreParser.h"
 #include "YuruInstrumentFilter.h"
 
 class CorrectToneFilter : public BaseFilter {
 public:
+    enum Status { PAUSE = 0, PLAYING, END_SCORE };
     CorrectToneFilter(const String& file_name, Filter& filter);
+    CorrectToneFilter(const String& file_name, bool auto_start, Filter& filter);
     CorrectToneFilter(Filter& filter);
 
     ~CorrectToneFilter();
@@ -29,56 +29,52 @@ public:
     bool sendNoteOff(uint8_t note, uint8_t velocity, uint8_t channel) override;
 
 private:
-    ScoreReader* sr_;
-    std::vector<ScoreReader::ScoreData> scores_;
+    ScoreParser* parser_;
 
-    bool is_note_registered_;  //< ノート登録状態
-    bool is_note_playing_;     //< ノート再生状態
+    String directory_name_;
+    ScoreParser::MidiMessage registered_midi_msg_;
+    ScoreParser::MidiMessage playing_midi_msg_;
+    bool is_end_track_;
 
-    unsigned long play_start_;  //< 再生開始時間
-    unsigned long play_end_;    //< 再生終了時間
+    bool is_note_playing_;  //< ノート再生状態
+
     bool is_music_start_;
 
     int score_num_;  //< 選択中の楽譜
 
-    int note_registered_;  //< 登録されているノート番号
-    int note_playing_;     //< 再生中のノート番号
-
-    uint8_t velocity_;  //< 音量
-    uint8_t channel_;   //< チャンネル
-
-    bool registerNoteTxt();
     void playNote();
     void stopNote(uint8_t velocity, uint8_t channel);
     void changePlayingNote();
 
     bool isMIDINum(int note);
 
-    void printScore();
     // others getter setter
-    void setScore(unsigned int new_score_num);
+    void setScore(int score_id);
     int getScoreNum();
 
-    bool executeCommand(ScoreReader::Note note);
-
-    void selectScore(int id);
+    //時間関連の関数は後に移植予定
+    // ----------------- timing variable -----------------
+    uint16_t root_tick_;      //< txt:曲のBPM, mid:曲の基礎Tick
+    int now_tempo_;           //< txt:曲の拍子, mid:基礎Tickの実時間
+    unsigned long duration_;  //< txt:ノート再生時間, mid:デルタタイムの実時間
 
     // ----------------- timing variable -----------------
-    int bpm_;               //< txt:曲のBPM, mid:曲の基礎Tick
-    int now_rhythm_;        //< txt:曲の拍子, mid:基礎Tickの実時間
-    int beat_ms_;           //< txt:16分音符の実時間
-    int triplets_beat_ms_;  //< txt:24分音符の実時間
-    int note_interval_;     //< txt:ノート再生時間, mid:デルタタイムの実時間
+    // 再生状態
+    int play_state_;
+    int default_state_;
+    unsigned long schedule_time_;  //再生開始時間
 
-    // timing function
-    bool updateNoteInterval();
-    void setRhythm(int new_rhythm);
-    void calcNoteInterval();
-    void setBpm(int new_bpm);
-    // ----------------- timing variable -----------------
-    ScoreReader::Note note_;
+    ScoreParser::MidiMessage midi_message_;
     bool is_waiting_;
-    bool registerNoteMidi();
+
+    bool readDirectoryScores(const String& dir_name);
+    bool readScore(File& file);
+    void selectScore(int id);
+    bool registerNote();
+
+    bool executeMetaEvent(const ScoreParser::MidiMessage& midi_message);
+    // bool executeSysExEvent(ScoreParser::MidiMessage& midi_message); //現状は対応させない
+    bool executeMIDIEvent(const ScoreParser::MidiMessage& midi_message);
 };
 
 #endif  // CORRECT_TONE_FILTER_H_

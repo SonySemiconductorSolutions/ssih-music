@@ -16,7 +16,7 @@
 #include <VoiceTriggerSrc.h>
 
 SFZSink sink("SawLpf.sfz");
-CorrectToneFilter filter("SCORE", sink);
+CorrectToneFilter filter("SCORE", true, sink);
 VoiceTriggerSrc inst(filter);
 
 void setup() {

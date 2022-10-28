@@ -15,7 +15,7 @@
 #include <SFZSink.h>
 
 SFZSink sink("SawLpf.sfz");
-ScoreSrc inst("SCORE", sink);
+ScoreSrc inst("SCORE", true, sink);
 
 void setup() {
     // init built-in I/O

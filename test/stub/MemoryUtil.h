@@ -4,8 +4,8 @@
  * Copyright 2022 Sony Semiconductor Solutions Corporation
  */
 
-#ifndef DUMMY_MEMORYUTIL_H_
-#define DUMMY_MEMORYUTIL_H_
+#ifndef DUMMY_MEMORY_UTIL_H_
+#define DUMMY_MEMORY_UTIL_H_
 
 #include "Arduino.h"
 
@@ -47,4 +47,4 @@ public:
 const PoolId NullPoolId = 0;
 const PoolId S0_REND_PCM_BUF_POOL = 1;
 
-#endif  // DUMMY_MEMORYUTIL_H_
+#endif  // DUMMY_MEMORY_UTIL_H_

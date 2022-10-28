@@ -4,8 +4,8 @@
  * Copyright 2022 Sony Semiconductor Solutions Corporation
  */
 
-#ifndef DUMMY_OUTPUTMIXER_H_
-#define DUMMY_OUTPUTMIXER_H_
+#ifndef DUMMY_OUTPUT_MIXER_H_
+#define DUMMY_OUTPUT_MIXER_H_
 
 #include <stddef.h>
 #include <stdint.h>
@@ -101,4 +101,4 @@ private:
     ~OutputMixer(void);
 };
 
-#endif  // DUMMY_OUTPUTMIXER_H_
+#endif  // DUMMY_OUTPUT_MIXER_H_

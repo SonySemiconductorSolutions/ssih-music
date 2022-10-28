@@ -8,11 +8,13 @@
 
 #include "CorrectToneFilter.h"
 
-#include <time.h>
-
+#include "path_util.h"
 #include "ScoreSrc.h"
+#include "SmfParser.h"
+#include "TextScoreParser.h"
 #include "ToneFilter.h"
 
+//#define DEBUG (1)
 // clang-format off
 #define nop(...) do {} while (0)
 // clang-format on
@@ -26,55 +28,101 @@
 #define error_printf printf
 #endif  // DEBUG
 
+static const char kClassName[] = "CorrectToneFilter";
+
+const int kDefaultTick = 960;
+const int kDefaultTempo = (int)60000000 / 120;
+
+enum ScoreFileType { kScoreFileTypeTxt = 0, kScoreFileTypeMidi, kScoreFileTypeOthers, kScoreFileTypeHidden };
+
+static ScoreFileType getFileType(const String& path) {
+    if (isHidden(path)) {
+        return kScoreFileTypeHidden;
+    }
+    String ext = getExtension(path);
+    ext.toLowerCase();
+    if (ext == ".mid" || ext == ".midi") {
+        return kScoreFileTypeMidi;
+    } else if (ext == ".txt") {
+        return kScoreFileTypeTxt;
+    } else {
+        return kScoreFileTypeOthers;
+    }
+}
+
 // others getter setter
-void CorrectToneFilter::setScore(unsigned int new_score_num) {
-    score_num_ = constrain(new_score_num, 0, (scores_.size() - 1));
-    selectScore(score_num_);
-    is_music_start_ = true;
+void CorrectToneFilter::setScore(int score_id) {
+    if (parser_ == nullptr) {
+        error_printf("[%s::%s] error: score was not loaded\n", kClassName, __func__);
+        return;
+    }
+    if (parser_->getNumberOfScores() == 0) {
+        error_printf("[%s::%s] error: cannot find track\n", kClassName, __func__);
+        return;
+    }
+    if (0 <= score_id && score_id < parser_->getNumberOfScores()) {
+        score_num_ = score_id;
+        selectScore(score_num_);
+    }
 }
 
 int CorrectToneFilter::getScoreNum() {
-    return constrain(score_num_, 0, (scores_.size() - 1));
+    if (parser_ == nullptr) {
+        error_printf("[%s::%s] error: score was not loaded\n", kClassName, __func__);
+        return -1;
+    }
+    if (parser_->getNumberOfScores() == 0) {
+        error_printf("[%s::%s] error: not play track\n", kClassName, __func__);
+        return -1;
+    }
+    if (0 <= score_num_ && score_num_ < parser_->getNumberOfScores()) {
+        return score_num_;
+    }
+    return -1;
 }
 
-CorrectToneFilter::CorrectToneFilter(const String& file_name, Filter& filter)
+CorrectToneFilter::CorrectToneFilter(const String& file_name, Filter& filter) : CorrectToneFilter(file_name, false, filter) {
+}
+
+CorrectToneFilter::CorrectToneFilter(const String& file_name, bool auto_start, Filter& filter)
     : BaseFilter(filter),
-      is_note_registered_(false),
+      parser_(nullptr),
+      directory_name_(file_name),
+      registered_midi_msg_(),
+      playing_midi_msg_(),
+      is_end_track_(false),
       is_note_playing_(false),
-      play_start_(0),
-      play_end_(0),
       is_music_start_(true),
       score_num_(0),
-      note_registered_(INVALID_NOTE_NUMBER),
-      note_playing_(INVALID_NOTE_NUMBER),
-      bpm_(0),
-      now_rhythm_(0),
-      beat_ms_(0),
-      triplets_beat_ms_(0),
-      note_interval_(0),
-      note_(ScoreReader::Note::Note()),
+      root_tick_(kDefaultTick),
+      now_tempo_(kDefaultTempo),
+      duration_(0),
+      play_state_(auto_start ? CorrectToneFilter::PLAYING : CorrectToneFilter::PAUSE),
+      default_state_(auto_start ? CorrectToneFilter::PLAYING : CorrectToneFilter::PAUSE),
+      schedule_time_(0),
       is_waiting_(false) {
-    sr_ = new ScoreReader(file_name);
-    scores_ = sr_->getScoresData();
-}
-
-CorrectToneFilter::CorrectToneFilter(Filter& filter) : CorrectToneFilter("SCORE", filter) {
 }
 
 CorrectToneFilter::~CorrectToneFilter() {
-    delete sr_;
+    if (parser_) {
+        delete parser_;
+        parser_ = nullptr;
+    }
 }
 
 bool CorrectToneFilter::setParam(int param_id, intptr_t value) {
     if (param_id == ScoreSrc::PARAMID_NUMBER_OF_SCORES) {
+        return false;
+    } else if (param_id == ScoreSrc::PARAMID_SCORE) {
         setScore((unsigned int)value);
         return true;
-    } else if (param_id == ScoreSrc::PARAMID_PLAYING_SCORE) {
+    } else if (param_id == ScoreSrc::PARAMID_SCORE_NAME) {
         return false;
-    } else if (param_id == ScoreSrc::PARAMID_PLAYING_SCORE_NAME) {
-        return false;
-    } else if (param_id >= ScoreSrc::PARAMID_SCORE_NAME) {
-        return false;
+    } else if (param_id == ScoreSrc::PARAMID_STATUS) {
+        if (!(play_state_ == ScoreSrc::END_SCORE)) {
+            play_state_ = value;
+        }
+        return true;
     } else {
         return BaseFilter::setParam(param_id, value);
     }
@@ -83,23 +131,23 @@ bool CorrectToneFilter::setParam(int param_id, intptr_t value) {
 intptr_t CorrectToneFilter::getParam(int param_id) {
     static char error_message[] = "Score Not Found";
     if (param_id == ScoreSrc::PARAMID_NUMBER_OF_SCORES) {
-        return constrain(getScoreNum(), 0, (scores_.size() - 1));
-        // SCORE's Info
-    } else if (param_id == ScoreSrc::PARAMID_PLAYING_SCORE) {
-        return scores_.size();
-    } else if (param_id == ScoreSrc::PARAMID_PLAYING_SCORE_NAME) {
-        if (scores_.size() != 0) {
-            return (intptr_t)scores_[getScoreNum()].title.c_str();
+        if (parser_ == nullptr) {
+            return 0;
+        } else {
+            return parser_->getNumberOfScores();
+        }
+    } else if (param_id == ScoreSrc::PARAMID_SCORE) {
+        return getScoreNum();
+    } else if (param_id == ScoreSrc::PARAMID_SCORE_NAME) {
+        if (parser_ == nullptr) {
+            return (intptr_t)error_message;
+        } else if (parser_->getNumberOfScores() > 0) {
+            return (intptr_t)parser_->getFileName().c_str();
         } else {
             return (intptr_t)error_message;
         }
-    } else if (param_id >= ScoreSrc::PARAMID_SCORE_NAME) {
-        if (scores_.size() != 0) {
-            int index = constrain((param_id - ScoreSrc::PARAMID_SCORE_NAME), 0, scores_.size() - 1);
-            return (intptr_t)scores_[index].title.c_str();
-        } else {
-            return (intptr_t)error_message;
-        }
+    } else if (param_id == ScoreSrc::PARAMID_STATUS) {
+        return play_state_;
     } else {
         return BaseFilter::getParam(param_id);
     }
@@ -108,57 +156,117 @@ intptr_t CorrectToneFilter::getParam(int param_id) {
 bool CorrectToneFilter::isAvailable(int param_id) {
     if (param_id == ScoreSrc::PARAMID_NUMBER_OF_SCORES) {
         return true;
-    } else if (param_id == ScoreSrc::PARAMID_PLAYING_SCORE_NAME) {
-        if (scores_.size() != 0) {
-            return true;
-        } else {
-            return false;
-        }
-    } else if (param_id == ScoreSrc::PARAMID_PLAYING_SCORE) {
+    } else if (param_id == ScoreSrc::PARAMID_SCORE) {
+        return true;
+    } else if (param_id == ScoreSrc::PARAMID_SCORE_NAME) {
         return false;
-    } else if (param_id >= ScoreSrc::PARAMID_SCORE_NAME) {
-        return false;
+    } else if (param_id == ScoreSrc::PARAMID_STATUS) {
+        return true;
     } else {
         return BaseFilter::isAvailable(param_id);
     }
 }
 
-void CorrectToneFilter::selectScore(int id) {
-    // sr_->printScoresData(scores_);
-    sr_->load(scores_[id]);
-    if (sr_->isMidiFile()) {
-        bpm_ = scores_[id].bpm;
-        now_rhythm_ = scores_[id].rhythm;
-        trace_printf("CorrectToneFilter: load midi\n");
-    } else {
-        setBpm(scores_[id].bpm);
-        setRhythm(scores_[id].rhythm);
-        trace_printf("CorrectToneFilter: load txt\n");
-    }
-
-    if (BaseFilter::isAvailable(ToneFilter::PARAMID_TONE)) {
-        setParam(ToneFilter::PARAMID_TONE, scores_[id].tone);
-    }
-    trace_printf("CorrectToneFilter: set score:%d name:%s\n", id, scores_[id].title.c_str());
-}
-
 bool CorrectToneFilter::begin() {
-    if (scores_.size() != 0) {
+    readDirectoryScores(directory_name_);
+    if (parser_ == nullptr) {
+        error_printf("[%s::%s] error: parser isnot available\n", kClassName, __func__);
+    } else if (parser_->getNumberOfScores() > 0) {
         selectScore(getScoreNum());
     } else {
-        error_printf("CorrectToneFilter: ERROR: Score not found.\n");
+        error_printf("[%s::%s] error: Score not found.\n", kClassName, __func__);
     }
 
     return BaseFilter::begin();
 }
 
-void CorrectToneFilter::update() {
-    if (scores_.size() != 0) {
-        if (sr_->isMidiFile()) {
-            registerNoteMidi();
-        } else {
-            registerNoteTxt();
+//楽譜一覧解析
+bool CorrectToneFilter::readDirectoryScores(const String& dir_name) {
+    SDClass sd;
+    //ファイルオープン
+    if (!sd.begin()) {
+        error_printf("[%s::%s] SD: %s begin error.\n", kClassName, __func__, dir_name.c_str());
+        return false;
+    }
+    File dir = sd.open(dir_name.c_str());
+    if (!dir) {  //ファイル読み込み(失敗)
+        error_printf("[%s::%s] SD: %s open error.\n", kClassName, __func__, dir_name.c_str());
+        return false;
+    }
+
+    debug_printf("[%s::%s] SD: %s open success.\n", kClassName, __func__, dir_name.c_str());
+    if (dir.isDirectory()) {  // 対象がディレクトリの場合
+        debug_printf("[%s::%s] (Directory)\n", kClassName, __func__);
+        while (true) {
+            File file = dir.openNextFile();
+            file.setTimeout(0);
+            //ファイルの読み込み確認
+            if (!file) {
+                break;
+            }
+            if (file.isDirectory()) {  //取得したファイルがディレクトリの場合は無視する
+                file.close();
+                continue;
+            }
+            readScore(file);
+            file.close();
         }
+    } else {  //対象がファイルの場合
+        debug_printf("[%s::%s] (file)\n", kClassName, __func__);
+        dir.setTimeout(0);
+        readScore(dir);
+        dir.close();
+    }
+
+    return true;
+}
+
+bool CorrectToneFilter::readScore(File& file) {
+    debug_printf("[%s::%s] SD: file:%s open success.\n", kClassName, __func__, file.name());
+    if (parser_) {
+        delete parser_;
+        parser_ = nullptr;
+    }
+    ScoreFileType type = getFileType(file.name());
+    if (type == kScoreFileTypeMidi) {
+        parser_ = new SmfParser(file.name());
+        return true;
+    } else if (type == kScoreFileTypeTxt) {
+        parser_ = new TextScoreParser(file.name());
+        return true;
+    }
+    error_printf("[%s::%s] SD: file:%s This file is not supported.\n", kClassName, __func__, file.name());
+    return false;
+}
+
+void CorrectToneFilter::selectScore(int id) {
+    if (parser_ == nullptr) {
+        error_printf("[%s::%s] error: parser isnot available\n", kClassName, __func__);
+        return;
+    } else if (parser_->getNumberOfScores() == 0) {
+        error_printf("[%s::%s] error: cannot find playable track\n", kClassName, __func__);
+        return;
+    } else if (!(0 <= id && id < parser_->getNumberOfScores())) {
+        error_printf("[%s::%s] error: out of track number\n", kClassName, __func__);
+        return;
+    }
+    parser_->loadScore(id);
+    root_tick_ = parser_->getRootTick();
+    is_end_track_ = false;
+    is_music_start_ = true;
+    memset(&playing_midi_msg_, 0x00, sizeof(playing_midi_msg_));
+    memset(&registered_midi_msg_, 0x00, sizeof(registered_midi_msg_));
+    memset(&midi_message_, 0x00, sizeof(midi_message_));
+    schedule_time_ = 0;
+    duration_ = 0;
+    is_waiting_ = false;
+}
+
+void CorrectToneFilter::update() {
+    if (parser_ == nullptr) {
+        error_printf("[%s::%s] error: parser isnot available\n", kClassName, __func__);
+    } else if (parser_->getNumberOfScores() > 0) {
+        registerNote();
     }
     if (is_note_playing_) {
         changePlayingNote();
@@ -166,82 +274,106 @@ void CorrectToneFilter::update() {
     BaseFilter::update();
 }
 
-bool CorrectToneFilter::registerNoteMidi() {
-    if (!is_waiting_) {
-        note_ = sr_->getNote();
-        trace_printf("CorrectToneFilter: dt:%d nn:%d ve:%02x ch:%d\n", note_.delta_time, note_.note_num, note_.velocity, note_.ch);
-        note_interval_ = sr_->calcDeltaTime(bpm_, note_.delta_time, now_rhythm_);
-        play_end_ = millis() + note_interval_;
-        trace_printf("CorrectToneFilter: intarval:%lu, end:%lu\n", note_interval_, play_end_);
-        is_waiting_ = true;
+bool CorrectToneFilter::registerNote() {
+    if (play_state_ == CorrectToneFilter::Status::END_SCORE) {
+        return false;
     }
-
-    if (play_end_ <= millis()) {
-        if (note_.note_num == ScoreReader::Command::kCommandRhythmChange) {
-            now_rhythm_ = note_.velocity;
-        } else if (NOTE_NUMBER_MIN <= note_.note_num && note_.note_num <= NOTE_NUMBER_MAX) {
-            if (note_.velocity == 0) {
-                note_registered_ = INVALID_NOTE_NUMBER;
-                is_note_registered_ = true;  //ノート登録状態へ変更
-            } else {
-                note_registered_ = note_.note_num;
-                is_note_registered_ = true;  //ノート登録状態へ変更
-            }
+    if (is_music_start_) {
+        schedule_time_ = millis();
+        is_music_start_ = false;
+    }
+    if (parser_ != nullptr) {
+        if (!is_waiting_) {
+            parser_->getMidiMessage(&midi_message_);
+            debug_printf("[%s::%s] delta_time:%d, ", kClassName, __func__, midi_message_.delta_time);
+            debug_printf("status_byte:%02x, data_byte1:%02x, data_byte2:%02x, ", midi_message_.status_byte, midi_message_.data_byte1, midi_message_.data_byte2);
+            debug_printf("event_code:%02x, event_length:%02x\n", midi_message_.event_code, midi_message_.event_length);
+            duration_ = (unsigned long)(((midi_message_.delta_time * now_tempo_) / root_tick_) / 1000);
+            schedule_time_ += duration_;
+            debug_printf("[%s::%s] duration_:%d = dt:%d * tempo_:%d / tick_:%d / 1000\n", kClassName, __func__, (int)duration_, midi_message_.delta_time,
+                         now_tempo_, root_tick_);
+            is_waiting_ = true;
         }
-        is_waiting_ = false;
+        if (default_state_ != play_state_) {
+            trace_printf("[%s::%s] old stat:%d, now stat:%d\n", kClassName, __func__, default_state_, play_state_);
+            if (play_state_ == CorrectToneFilter::PAUSE) {
+                duration_ = schedule_time_ - millis();  //残時間の取得
+                uint8_t ch = playing_midi_msg_.status_byte & 0x0f;
+                BaseFilter::sendNoteOff(playing_midi_msg_.data_byte1, playing_midi_msg_.data_byte2, ch);
+            } else if (play_state_ == CorrectToneFilter::PLAYING) {
+                schedule_time_ = millis() + duration_;  //残時間の再生開始
+            }
+            default_state_ = play_state_;
+        } else if (schedule_time_ <= millis() && play_state_ == PLAYING) {
+            if (midi_message_.status_byte == ScoreParser::kMetaEvent) {  // メタイベントの処理
+                executeMetaEvent(midi_message_);
+            } else if (midi_message_.status_byte == ScoreParser::kSysExEvent) {  // SysExイベントの処理
+                // executeSysExEvent();
+            } else {  // MIDIイベントの処理
+                executeMIDIEvent(midi_message_);
+            }
+            memset(&midi_message_, 0x00, sizeof(midi_message_));
+            is_waiting_ = false;
+        }
     }
     return true;
 }
 
-bool CorrectToneFilter::registerNoteTxt() {
-    if (!is_note_registered_) {  //ノート受付可能状態
-        ScoreReader::Note note = sr_->getNote();
-        // sr_->printNote(note);
-        if ((NOTE_NUMBER_MIN <= note.note_num && note.note_num <= NOTE_NUMBER_MAX) || note.note_num == INVALID_NOTE_NUMBER) {
-            if (is_music_start_) {  //ここはフラグの方が適切(曲切り替えの対応が必要)
-                play_start_ = millis();
-                is_music_start_ = false;
-                trace_printf("CorrectToneFilter: start:%d\n", play_start_);
-            } else {
-                play_start_ = play_end_;
-            }
+bool CorrectToneFilter::executeMetaEvent(const ScoreParser::MidiMessage& midi_message) {
+    int data = 0;                                             //他のメタイベント対応する場合にも使いまわしたい
+    if (midi_message.event_code == ScoreParser::kSetTempo) {  //テンポ変更
+        for (unsigned int i = 0; i < midi_message.event_length; i++) {
+            data = data << 8;
+            data += midi_message.sysex_array[i];
         }
-        if (ScoreReader::kCommandNumMin < note.note_num && note.note_num < ScoreReader::kCommandNumMax) {
-            executeCommand(note);
-            return true;
-        } else if (!(note.note_num == INVALID_NOTE_NUMBER || isMIDINum(note.note_num))) {
-            return false;
-        }
-        debug_printf("CorrectToneFilter: playNote NUM:%d time:%d\n", note.note_num, note_interval_);
-        note_registered_ = note.note_num;
-        is_note_registered_ = true;  //ノート登録状態へ変更
+        now_tempo_ = data;
+        debug_printf("[%s::%s] now_tempo_:%d\n", kClassName, __func__, now_tempo_);
+    } else if (midi_message.event_code == ScoreParser::kEndOfTrack) {  //楽譜終了
+        play_state_ = CorrectToneFilter::END_SCORE;
+    } else if (midi_message.event_code < 0x80) {
+        debug_printf("[%s::%s] %02x is unused Meta event.\n", kClassName, __func__, midi_message.event_code);
+    } else {
+        error_printf("[%s::%s] error: This Meta event is not supported.\n", kClassName, __func__);
+        return false;
+    }
+    return true;
+}
 
-        play_end_ = play_start_ + note_interval_;
-
-        trace_printf("CorrectToneFilter: start:%d, end:%d, sendnote:%d\n", play_start_, play_end_);
-    } else {                          //ノート再生中状態
-        if (play_end_ <= millis()) {  // ノートの登録期間の確認
-            is_note_registered_ = false;
-        }
+bool CorrectToneFilter::executeMIDIEvent(const ScoreParser::MidiMessage& midi_message) {
+    uint8_t status = midi_message.status_byte & 0xf0;
+    if (status == ScoreParser::kNoteOff) {  // Note off
+        registered_midi_msg_ = midi_message;
+    } else if (status == ScoreParser::kNoteOn) {  // Note on
+        registered_midi_msg_ = midi_message;
+    } else if (status == ScoreParser::kPolyphonicKeyPressure) {  // Polyphonic Key Pressure
+        debug_printf("[%s::%s] Polyphonic Key Pressure is unused Meta event.\n", kClassName, __func__);
+    } else if (status == ScoreParser::kControlChange) {  // Control Change
+        debug_printf("[%s::%s] Control Change is unused Meta event.\n", kClassName, __func__);
+    } else if (status == ScoreParser::kProgramChange) {  // Program Change
+        debug_printf("[%s::%s] Program Change is unused Meta event.\n", kClassName, __func__);
+    } else if (status == ScoreParser::kChannelPressure) {  // Channel Pressure
+        debug_printf("[%s::%s] Channel Pressure is unused Meta event.\n", kClassName, __func__);
+    } else if (status == ScoreParser::kPitchBendChange) {  // Pitch Bend Change
+        debug_printf("[%s::%s] Pitch Bend Change is unused Meta event.\n", kClassName, __func__);
     }
     return true;
 }
 
 bool CorrectToneFilter::sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) {
-    velocity_ = velocity;
-    channel_ = channel;
     playNote();
     return true;
 }
 
 void CorrectToneFilter::playNote() {
-    if (!is_note_playing_) {                //ノート停止状態
-        if (isMIDINum(note_registered_)) {  //有効ノート
-            BaseFilter::sendNoteOn(note_registered_, velocity_, channel_);
+    if (!is_note_playing_) {  //ノート停止状態
+        uint8_t status = registered_midi_msg_.status_byte & 0xf0;
+        if (status == ScoreParser::kNoteOn) {  //有効ノート
+            uint8_t ch = registered_midi_msg_.status_byte & 0x0f;
+            BaseFilter::sendNoteOn(registered_midi_msg_.data_byte1, registered_midi_msg_.data_byte2, ch);
         }
-        note_playing_ = note_registered_;  //再生中のノートを保持
-        is_note_playing_ = true;           //ノート再生状態
-    } else {                               //ノート再生状態
+        playing_midi_msg_ = registered_midi_msg_;  //再生中のノートを保持
+        is_note_playing_ = true;                   //ノート再生状態
+    } else {                                       //ノート再生状態
         changePlayingNote();
     }
 }
@@ -252,118 +384,37 @@ bool CorrectToneFilter::sendNoteOff(uint8_t note, uint8_t velocity, uint8_t chan
 }
 
 void CorrectToneFilter::stopNote(uint8_t velocity, uint8_t channel) {
-    if (is_note_playing_) {              //ノート再生状態
-        if (isMIDINum(note_playing_)) {  //有効ノート
-            BaseFilter::sendNoteOff(note_playing_, velocity, channel);
+    if (is_note_playing_) {  //ノート再生状態
+        if (isMIDINum(playing_midi_msg_.data_byte1)) {
+            uint8_t ch = playing_midi_msg_.status_byte & 0x0f;
+            BaseFilter::sendNoteOff(playing_midi_msg_.data_byte1, playing_midi_msg_.data_byte2, ch);
         }
-        note_playing_ = INVALID_NOTE_NUMBER;
         is_note_playing_ = false;  //ノート停止状態
     }
 }
 
 void CorrectToneFilter::changePlayingNote() {
-    trace_printf("CorrectToneFilter: note_playing_:%d, note_registered_%d\n", note_playing_, note_registered_);
-    if (note_playing_ != note_registered_) {
-        trace_printf("CorrectToneFilter: change\n");
-        if (isMIDINum(note_playing_)) {
-            BaseFilter::sendNoteOff(note_playing_, velocity_, channel_);
+    if (playing_midi_msg_.status_byte != registered_midi_msg_.status_byte || playing_midi_msg_.data_byte1 != registered_midi_msg_.data_byte1) {
+        uint8_t playing_status = registered_midi_msg_.status_byte & 0xf0;
+        if (isMIDINum(playing_midi_msg_.data_byte1) && playing_status == ScoreParser::kNoteOn) {
+            uint8_t ch = playing_midi_msg_.status_byte & 0x0f;
+            BaseFilter::sendNoteOff(playing_midi_msg_.data_byte1, playing_midi_msg_.data_byte2, ch);
         }
-        if (isMIDINum(note_registered_)) {  //有効ノート
-            BaseFilter::sendNoteOn(note_registered_, velocity_, channel_);
+        if (isMIDINum(registered_midi_msg_.data_byte1)) {  //有効ノート
+            int8_t regist_ch = registered_midi_msg_.status_byte & 0x0f;
+            uint8_t regist_status = registered_midi_msg_.status_byte & 0xf0;
+            if (regist_status == ScoreParser::kNoteOn && play_state_ == PLAYING) {
+                BaseFilter::sendNoteOn(registered_midi_msg_.data_byte1, registered_midi_msg_.data_byte2, regist_ch);
+            } else if (regist_status == ScoreParser::kNoteOff) {
+                BaseFilter::sendNoteOff(registered_midi_msg_.data_byte1, registered_midi_msg_.data_byte2, regist_ch);
+            }
         }
-        note_playing_ = note_registered_;  //再生中のノートを保持
+        playing_midi_msg_ = registered_midi_msg_;  //再生中のノートを保持
     }
 }
 
 bool CorrectToneFilter::isMIDINum(int note) {
     return (NOTE_NUMBER_MIN <= note && note <= NOTE_NUMBER_MAX);
-}
-
-bool CorrectToneFilter::executeCommand(ScoreReader::Note note) {
-    if (note.note_num == ScoreReader::kCommandRhythmChange) {
-        setRhythm(note.velocity);
-    } else if (note.note_num == ScoreReader::kCommandToneChange) {
-        if (BaseFilter::isAvailable(ToneFilter::PARAMID_TONE)) {
-            setParam(ToneFilter::PARAMID_TONE, note.velocity);
-        }
-    } else if (note.note_num == ScoreReader::kCommandBpmChange) {
-        setBpm(note.velocity);
-    } else if (note.note_num == ScoreReader::kCommandDelay) {
-        stopNote(DEFAULT_VELOCITY, DEFAULT_CHANNEL);  // velocity
-        play_end_ = play_start_ + note.velocity;
-        note_registered_ = note.note_num;
-        is_note_registered_ = true;  //ノート登録状態へ変更
-    } else if (note.note_num == ScoreReader::kCommandScoreEnd) {
-        stopNote(DEFAULT_VELOCITY, DEFAULT_CHANNEL);  // velocity
-        note_registered_ = note.note_num;
-        is_note_registered_ = false;  //ノート登録状態へ変更
-        is_note_playing_ = false;
-    } else {
-        trace_printf("CorrectToneFilter: ERROR\n");
-        return false;
-    }
-    return true;
-}
-
-// timing function
-bool CorrectToneFilter::updateNoteInterval() {
-    switch (now_rhythm_) {
-        case ScoreReader::kRhythmNormal:
-            note_interval_ = beat_ms_;
-            trace_printf("CorrectToneFilter: NORMAL(16 NOTE) RHYTHM:%d\n", note_interval_);
-            break;
-        case ScoreReader::kRhythm8Note:
-            note_interval_ = beat_ms_ * 2;
-            trace_printf("CorrectToneFilter: 8_NOTE RHYTHM:%d\n", note_interval_);
-            break;
-        case ScoreReader::kRhythm4Note:
-            note_interval_ = beat_ms_ * 4;
-            trace_printf("CorrectToneFilter: 4_NOTE RHYTHM:%d\n", note_interval_);
-            break;
-        case ScoreReader::kRhythm1NoteTriplets:
-            note_interval_ = triplets_beat_ms_ * 8;
-            trace_printf("CorrectToneFilter: 2 NOTE TRIPLETS RHYTHM:%d\n", note_interval_);
-            break;
-        case ScoreReader::kRhythm2NoteTriplets:
-            note_interval_ = triplets_beat_ms_ * 4;
-            trace_printf("CorrectToneFilter: 4 NOTE TRIPLETS RHYTHM:%d\n", note_interval_);
-            break;
-        case ScoreReader::kRhythm4NoteTriplets:
-            note_interval_ = triplets_beat_ms_ * 2;
-            trace_printf("CorrectToneFilter: 8 NOTE TRIPLETS RHYTHM:%d\n", note_interval_);
-            break;
-        case ScoreReader::kRhythm8NoteTriplets:
-            note_interval_ = triplets_beat_ms_;
-            trace_printf("CorrectToneFilter: 16 NOTE TRIPLETS RHYTHM:%d\n", note_interval_);
-            break;
-    }
-    return true;
-}
-
-void CorrectToneFilter::setRhythm(int new_rhythm) {
-    now_rhythm_ = new_rhythm;
-    updateNoteInterval();
-}
-
-void CorrectToneFilter::calcNoteInterval() {
-    beat_ms_ = (int)(60000 / bpm_);
-    beat_ms_ = beat_ms_ / 4;  // 16分音符の時間
-
-    triplets_beat_ms_ = (beat_ms_ * 2) / 3;  //半拍3連 (24分音符)
-
-    updateNoteInterval();
-}
-
-void CorrectToneFilter::setBpm(int new_bpm) {
-    bpm_ = new_bpm;
-    calcNoteInterval();
-
-    trace_printf("CorrectToneFilter: BPM = %d\n", bpm_);
-    trace_printf("CorrectToneFilter: 1 Beat milliseconds = %d\n", beat_ms_);
-    trace_printf("CorrectToneFilter: 4拍3連 = %d, ", triplets_beat_ms_ * 8);
-    trace_printf("CorrectToneFilter: 2拍3連 = %d, ", triplets_beat_ms_ * 4);
-    trace_printf("CorrectToneFilter: 1拍3連 = %d, ", triplets_beat_ms_ * 2);
-    trace_printf("CorrectToneFilter: 1/2拍3連 = %d\n", triplets_beat_ms_);
 }
 
 #endif  // ARDUINO_ARCH_SPRESENSE

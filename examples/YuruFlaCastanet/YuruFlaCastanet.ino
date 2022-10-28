@@ -1,3 +1,16 @@
+/*
+ * SPDX-License-Identifier: (Apache-2.0 OR LGPL-2.1-or-later)
+ *
+ * Copyright 2022 Sony Semiconductor Solutions Corporation
+ */
+
+#ifndef ARDUINO_ARCH_SPRESENSE
+#error "Board selection is wrong!!"
+#endif
+#ifdef SUBCORE
+#error "Core selection is wrong!!"
+#endif
+
 #include <BMI160Gen.h>
 #include <SFZSink.h>
 

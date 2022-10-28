@@ -14,24 +14,28 @@ GTESTFLAGS = -lgtest -lgtest_main
 GCOVFLAGS = --branch-probabilities --branch-counts
 
 ALL_OBJECTS = ../src/BaseFilter.o \
+              ../src/BufferedFileReader.o \
+			  ../src/CorrectToneFilter.o \
               ../src/NullFilter.o \
               ../src/OctaveShift.o \
-              ../src/OneKeySynthesizerFilter.o \
+			  ../src/OneKeySynthesizerFilter.o \
               ../src/path_util.o \
               ../src/PcmRenderer.o \
-              ../src/ScoreReader.o \
               ../src/ScoreSrc.o \
               ../src/SDSeekSink.o \
               ../src/SDSink.o \
+              ../src/SmfParser.o \
               ../src/SFZParser.o \
               ../src/SFZSink.o \
               ../src/TarReader.o \
+              ../src/TextScoreParser.o \
               ../src/ToneFilter.o \
               ../src/VoiceCapture.o \
               ../src/VoiceTriggerSrc.o \
               ../src/WavReader.o \
               ../src/YuruhornSrc.o \
               ../src/YuruInstrumentConfig.o \
+              ../src/YuruInstrumentConsole.o \
 			  stub/stub.o
 
 YURUHORNSRC_TEST_OBJECTS = yuruhornsrc_test.o $(ALL_OBJECTS)

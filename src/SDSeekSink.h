@@ -4,8 +4,8 @@
  * Copyright 2022 Sony Semiconductor Solutions Corporation
  */
 
-#ifndef SDSEEKSINK_H_
-#define SDSEEKSINK_H_
+#ifndef SD_SEEK_SINK_H_
+#define SD_SEEK_SINK_H_
 
 #include <stdint.h>
 
@@ -38,4 +38,4 @@ private:
     PcmRenderer renderer_;
 };
 
-#endif  // SDSEEKSINK_H_
+#endif  // SD_SEEK_SINK_H_

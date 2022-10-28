@@ -4,8 +4,8 @@
  * Copyright 2022 Sony Semiconductor Solutions Corporation
  */
 
-#ifndef PCMRENDERER_H_
-#define PCMRENDERER_H_
+#ifndef PCM_RENDERER_H_
+#define PCM_RENDERER_H_
 
 #include <OutputMixer.h>
 
@@ -57,4 +57,4 @@ private:
     size_t rp_[kMaxChannelNum];
 };
 
-#endif  // PCMRENDERER_H_
+#endif  // PCM_RENDERER_H_

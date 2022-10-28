@@ -544,7 +544,7 @@ void SFZSink::startSound() {
     trace_printf("enter: %s()\n", __func__);
 
     if (playing_region_ == nullptr) {
-        printf("SFZ data not found.\n");
+        error_printf("SFZ data not found.\n");
         return;
     }
 

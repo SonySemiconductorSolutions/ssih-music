@@ -11,11 +11,38 @@
 String getFolderPath(const String& path) {
     int sep1 = path.lastIndexOf("/");
     int sep2 = path.lastIndexOf("\\");
-    if (sep1 < 0 && sep2 < 0) {
+    int sep = (sep1 > sep2) ? sep1 : sep2;
+    if (sep < 0) {
         return "";
     } else {
-        return path.substring(0, ((sep1 > sep2) ? sep1 : sep2) + 1);
+        return path.substring(0, sep + 1);
     }
+}
+
+String getBaseName(const String& path) {
+    int sep1 = path.lastIndexOf("/");
+    int sep2 = path.lastIndexOf("\\");
+    int sep = (sep1 > sep2) ? sep1 : sep2;
+    if (sep < 0) {
+        return path;
+    } else {
+        return path.substring(sep + 1);
+    }
+}
+
+String getExtension(const String& path) {
+    String basename = getBaseName(path);
+    int sep = path.lastIndexOf(".");
+    if (sep < 0) {
+        return path;
+    } else {
+        return path.substring(sep);
+    }
+}
+
+bool isHidden(const String& path) {
+    String basename = getBaseName(path);
+    return basename[0] == '.';
 }
 
 String normalizePath(const String& path) {

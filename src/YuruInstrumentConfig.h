@@ -4,8 +4,8 @@
  * Copyright 2022 Sony Semiconductor Solutions Corporation
  */
 
-#ifndef YURUINSTRUMENTCONFIG_H_
-#define YURUINSTRUMENTCONFIG_H_
+#ifndef YURU_INSTRUMENT_CONFIG_H_
+#define YURU_INSTRUMENT_CONFIG_H_
 
 #include <vector>
 
@@ -42,4 +42,4 @@ private:
     std::vector<ParamSpec> param_specs_;
 };
 
-#endif  // YURUINSTRUMENTCONFIG_H_
+#endif  // YURU_INSTRUMENT_CONFIG_H_

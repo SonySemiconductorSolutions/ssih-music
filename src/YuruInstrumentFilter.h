@@ -4,8 +4,8 @@
  * Copyright 2022 Sony Semiconductor Solutions Corporation
  */
 
-#ifndef YURUINSTRUMENT_FILTER_H_
-#define YURUINSTRUMENT_FILTER_H_
+#ifndef YURU_INSTRUMENT_FILTER_H_
+#define YURU_INSTRUMENT_FILTER_H_
 
 #include <stdint.h>
 #include <stddef.h>
@@ -64,4 +64,4 @@ public:
     bool sendNoteOff(uint8_t note, uint8_t velocity, uint8_t channel) override;
 };
 
-#endif  // YURUINSTRUMENT_FILTER_H_
+#endif  // YURU_INSTRUMENT_FILTER_H_

@@ -4,27 +4,30 @@
  * Copyright 2022 Sony Semiconductor Solutions Corporation
  */
 
-#ifndef SCORESRC_H_
-#define SCORESRC_H_
+#ifndef SCORE_SRC_H_
+#define SCORE_SRC_H_
 
 #include <time.h>
 
-#include "ScoreReader.h"
+#include "ScoreParser.h"
+#include "SmfParser.h"
 #include "YuruInstrumentFilter.h"
 
 class ScoreSrc : public BaseFilter {
 public:
     enum ParamId {                              // MAGIC CHAR = 'M'
-        PARAMID_NUMBER_OF_SCORES = ('M' << 8),  //<
-        PARAMID_PLAYING_SCORE,                  //<
-        PARAMID_PLAYING_SCORE_NAME,             //<
-        PARAMID_SCORE_NAME                      //<
+        PARAMID_NUMBER_OF_SCORES = ('G' << 8),  //<
+        PARAMID_SCORE,                          //<
+        PARAMID_SCORE_NAME,                     //<
+        PARAMID_STATUS                          //<
     };
 
-    ScoreSrc(const String& file_name, Filter& filter);
-    ScoreSrc(Filter& filter);
+    enum Status { PAUSE = 0, PLAYING, END_SCORE };
 
-    ~ScoreSrc();
+    ScoreSrc(const String& file_name, Filter& filter);
+    ScoreSrc(const String& file_name, bool auto_start, Filter& filter);
+
+    virtual ~ScoreSrc();
 
     bool setParam(int param_id, intptr_t value) override;
     intptr_t getParam(int param_id) override;
@@ -33,16 +36,13 @@ public:
     void update() override;
 
 private:
-    ScoreReader* sr_;
-    std::vector<ScoreReader::ScoreData> scores_;
+    ScoreParser* parser_;
 
-    unsigned int score_num_;
-    int prev_note_;
-
-    void printScore();
+    String directory_name_;
+    int score_num_;
 
     // others getter setter
-    void setScore(unsigned int new_score_num);
+    void setScore(int score_id);
 
     void selectScore(int id);
 
@@ -50,29 +50,27 @@ private:
 
     //時間関連の関数は後に移植予定
     // ----------------- timing variable -----------------
-    int bpm_;               //< txt:曲のBPM, mid:曲の基礎Tick
-    int now_rhythm_;        //< txt:曲の拍子, mid:基礎Tickの実時間
-    int beat_ms_;           //< txt:16分音符の実時間
-    int triplets_beat_ms_;  //< txt:24分音符の実時間
-    int note_interval_;     //< txt:ノート再生時間, mid:デルタタイムの実時間
+    uint16_t root_tick_;      //< txt:曲のBPM, mid:曲の基礎Tick
+    int now_tempo_;           //< txt:曲の拍子, mid:基礎Tickの実時間
+    unsigned long duration_;  //< txt:ノート再生時間, mid:デルタタイムの実時間
 
-    // timing function
-    bool updateNoteInterval();
-    void setRhythm(int new_rhythm);
-    void calcNoteInterval();
-    void setBpm(int new_bpm);
     // ----------------- timing variable -----------------
     // 再生状態
     int play_state_;
-    unsigned long play_start_;  //再生開始時間
-    unsigned long play_end_;    //再生開始時間
+    int default_state_;
+    unsigned long schedule_time_;  //再生開始時間
+
+    ScoreParser::MidiMessage midi_message_;
+    ScoreParser::MidiMessage playing_midi_message_;
+    bool is_waiting_;
     bool is_music_start_;
 
-    ScoreReader::Note note_;
-    bool is_waiting_;
-    bool playNoteMidi();
-    bool playNoteTxt();
-    bool executeCommand(ScoreReader::Note note);
+    bool readDirectoryScores(const String& dir_name);
+    bool readScore(File& file);
+
+    bool executeMetaEvent(const ScoreParser::MidiMessage& midi_message);
+    // bool executeSysExEvent(ScoreParser::MidiMessage& midi_message); //現状は対応させない
+    bool executeMIDIEvent(const ScoreParser::MidiMessage& midi_message);
 };
 
-#endif  // SCORESRC_H_
+#endif  // SCORE_SRC_H_

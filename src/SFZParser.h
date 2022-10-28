@@ -4,8 +4,8 @@
  * Copyright 2022 Sony Semiconductor Solutions Corporation
  */
 
-#ifndef SFZ_PARSE_H_
-#define SFZ_PARSE_H_
+#ifndef SFZ_PARSER_H_
+#define SFZ_PARSER_H_
 
 #include <vector>
 
@@ -35,4 +35,4 @@ private:
     std::vector<String> define_values_;
 };
 
-#endif  // SFZ_PARSE_H_
+#endif  // SFZ_PARSER_H_

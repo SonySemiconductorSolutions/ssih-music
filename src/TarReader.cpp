@@ -178,7 +178,7 @@ TarReader::Stream TarReader::open(const char *name) {
 
 TarReader::Stream TarReader::open(int index) {
     trace_printf("%s(%d)\n", __func__, index);
-    if (0 <= index && index < (int)entries_.size()) {
+    if (0 <= index && (size_t)index < entries_.size()) {
         const auto &e = entries_[index];
         debug_printf("%s: name=%s, offset=%d, size=%d\n", __func__, e.name.c_str(), e.offset, e.size);
         file_.seek(e.offset);

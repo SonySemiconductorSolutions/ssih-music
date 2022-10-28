@@ -4,8 +4,8 @@
  * Copyright 2022 Sony Semiconductor Solutions Corporation
  */
 
-#ifndef YURUINSTRUMENTCONSOLE_H_
-#define YURUINSTRUMENTCONSOLE_H_
+#ifndef YURU_INSTRUMENT_CONSOLE_H_
+#define YURU_INSTRUMENT_CONSOLE_H_
 
 #include "YuruInstrumentConfig.h"
 
@@ -25,4 +25,4 @@ private:
     size_t line_index_;
 };
 
-#endif  // YURUINSTRUMENTCONSOLE_H_
+#endif  // YURU_INSTRUMENT_CONSOLE_H_

@@ -4,8 +4,8 @@
  * Copyright 2022 Sony Semiconductor Solutions Corporation
  */
 
-#ifndef VOICE_TRIGGER_H_
-#define VOICE_TRIGGER_H_
+#ifndef VOICE_TRIGGER_SRC_H_
+#define VOICE_TRIGGER_SRC_H_
 
 #include "YuruInstrumentFilter.h"
 #include "VoiceCapture.h"
@@ -26,4 +26,4 @@ private:
     int activeVoice(unsigned int freq, unsigned int volume);
 };
 
-#endif  // VOICE_TRIGGER_H_
+#endif  // VOICE_TRIGGER_SRC_H_
