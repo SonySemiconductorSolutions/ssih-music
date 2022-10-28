@@ -10,6 +10,8 @@
 
 #include <SDHCI.h>
 
+#include "WavReader.h"
+
 // #define DEBUG (1)
 
 // clang-format off
@@ -25,6 +27,8 @@
 #define error_printf printf
 #endif  // if defined(DEBUG)
 
+static const char kClassName[] = "SDSink";
+
 // playback parameters
 // NOTICE: PcmRenderer only supports 48kHz/16bit/2ch. Otherwise, it will not work.
 const int kPbSampleFrq = 48000;
@@ -34,124 +38,117 @@ const int kPbSampleCount = 240;
 const int kPbBlockSize = kPbSampleCount * (kPbBitDepth / 8) * kPbChannelCount;
 const int kPbCacheSize = (24 * 1024);
 
-const int kPbBytePerSec = kPbSampleFrq * (kPbBitDepth / 8) * kPbChannelCount;
-
-// const int kDefaultOffset = 200;
 const int kDefaultOffset = 0;
-
 const int kVolumeMin = -1020;
 const int kVolumeMax = 120;
+const int kDefaultVolume = 0;
 
 // cache parameter
-const int kPreloadFrameNum = 3;
-const int kLoadFrameNum = 10;
+const int kLoadFrames = 10;
 
-SDSink::PcmData::PcmData() : note(INVALID_NOTE_NUMBER), path(""), size(0), offset(0) {
-}
-
-static uint32_t msToSa(int ms) {
-    return kPbSampleFrq * ms / 1000 * (kPbBitDepth / 8) * kPbChannelCount;
-}
+const static int kUnallocatedChannel = -1;
+const static int kDeallocatedChannel = -2;
 
 static uint32_t msToByte(int ms) {
+    const int kPbBytePerSec = kPbSampleFrq * (kPbBitDepth / 8) * kPbChannelCount;
     return kPbBytePerSec * ms / 1000;
-}
-
-static void writeToRenderer(PcmRenderer &renderer, int ch, File &file, size_t offset, size_t pcm_offset, size_t pcm_size, size_t *remain_pcm_size, bool loop) {
-    // trace_printf("%s: writable=%d\n", __func__, renderer.getWritableSize());
-    if (renderer.getWritableSize(ch) >= kPbBlockSize) {
-        // WAVEファイル対応(Size)
-        size_t read_size = 0;
-        // trace_printf("(%s) (pcm_size:%d) remain_pcm_size:%d\n", __func__, pcm_size, (*remain_pcm_size));
-        if (kPbBlockSize <= (*remain_pcm_size)) {
-            read_size = kPbBlockSize;
-        } else {
-            read_size = (*remain_pcm_size);
-        }
-        uint8_t buffer[read_size];
-        read_size = file.read(buffer, read_size);
-        renderer.write(ch, buffer, read_size);
-        if (read_size < kPbBlockSize || (*remain_pcm_size) == 0) {
-            if (loop) {
-                file.seek(pcm_offset + offset);
-                (*remain_pcm_size) = pcm_size;
-                debug_printf("file finish\n");
-            } else {
-                (*remain_pcm_size) = 0;
-            }
-        } else {
-            (*remain_pcm_size) -= kPbBlockSize;
-        }
-    }
 }
 
 SDSink::SDSink(const SDSink::Item *table, size_t table_length)
     : NullFilter(),
+      units_(),
+      renderer_(kPbSampleFrq, kPbBitDepth, kPbChannelCount, kPbSampleCount, kPbCacheSize, 4),
       offset_(kDefaultOffset),
-      volume_(0),
-      renderer_(kPbSampleFrq, kPbBitDepth, kPbChannelCount, kPbSampleCount, kPbCacheSize, 1),
-      table_index_(-1),
-      remain_pcm_size_(0),
-      loop_(false) {
-    for (size_t i = 0; i < table_length; i++) {
-        PcmData pcm_data = PcmData();
-        pcm_data.note = table[i].note;
-        pcm_data.path = table[i].path;
-        // wave
-        SDClass sd;
-        File file = sd.open(pcm_data.path.c_str());
-        WavReader wav_reader = WavReader(file);
-        pcm_data.size = wav_reader.getPcmSize();
-        pcm_data.offset = wav_reader.getPcmOffset();
-        file.close();
-
-        pcm_table_.push_back(pcm_data);
+      loop_(false),
+      volume_(kDefaultVolume) {
+    for (size_t i = 0; i < sizeof(units_) / sizeof(units_[0]); i++) {
+        units_[i].offset = 0;
+        units_[i].end = 0;
+        units_[i].render_ch = kDeallocatedChannel;
     }
-
-    for (size_t i = 0; i < pcm_table_.size(); i++) {
-        debug_printf("pcm_note:%3d, pcm_path:%s, pcm_size:%06d, pcm_offset:%6d\n", pcm_table_[i].note, pcm_table_[i].path.c_str(), pcm_table_[i].size,
-                     pcm_table_[i].offset);
+    for (size_t i = 0; i < table_length; i++) {
+        if (table[i].note < sizeof(units_) / sizeof(units_[0])) {
+            units_[table[i].note].path = table[i].path;
+        }
     }
 }
 
 SDSink::~SDSink() {
+    for (size_t i = 0; i < sizeof(units_) / sizeof(units_[0]); i++) {
+        if (units_[i].render_ch >= 0) {
+            renderer_.deallocateChannel(units_[i].render_ch);
+            units_[i].render_ch = kDeallocatedChannel;
+        }
+        if (units_[i].file) {
+            units_[i].file.close();
+        }
+    }
 }
 
 bool SDSink::begin() {
     NullFilter::begin();
-    bool ok = true;
-
-    // setup renderer
-    renderer_.begin();
-
-    debug_printf("start playback\n");
-
-    // preload sound
-    for (int i = 0; i < kPreloadFrameNum; i++) {
-        if (!renderer_.render()) {
-            break;
+    for (size_t i = 0; i < sizeof(units_) / sizeof(units_[0]); i++) {
+        if (units_[i].path.length() == 0) {
+            continue;
         }
+        File file;
+        if (units_[i].path[0] == '/') {
+            file = File(units_[i].path.c_str());
+        } else {
+            SDClass sdcard;
+            if (!sdcard.begin()) {
+                error_printf("[%s::%s] error: cannot access sdcard\n", kClassName, __func__);
+                break;
+            }
+            file = sdcard.open(units_[i].path.c_str());
+        }
+        if (!file) {
+            error_printf("[%s::%s] error: cannot open \"%s\"\n", kClassName, __func__, units_[i].path.c_str());
+            continue;
+        }
+        if (file.isDirectory()) {
+            error_printf("[%s::%s] error: \"%s\" is directory\n", kClassName, __func__, units_[i].path.c_str());
+            file.close();
+            continue;
+        }
+        WavReader wav_reader = WavReader(file);
+        units_[i].offset = wav_reader.getPcmOffset();
+        units_[i].end = units_[i].offset + wav_reader.getPcmSize();
+        file.close();
     }
 
-    return ok;
+    renderer_.begin();
+    return true;
 }
 
 void SDSink::update() {
-    switch (renderer_.getState()) {
-        case PcmRenderer::kStateReady:
-            break;
-        case PcmRenderer::kStateActive:
-            for (int i = 0; i < kLoadFrameNum; i++) {
-                if (0 <= table_index_) {
-                    writeToRenderer(renderer_, 0, file_, msToSa(offset_), pcm_table_[table_index_].offset, pcm_table_[table_index_].size, &remain_pcm_size_,
-                                    loop_);
+    for (size_t i = 0; i < sizeof(units_) / sizeof(units_[0]); i++) {
+        if (units_[i].render_ch < 0) {
+            continue;
+        }
+        for (int j = 0; j < kLoadFrames; j++) {
+            // end of file
+            if (units_[i].file.position() >= units_[i].file.size()) {
+                if (loop_) {
+                    units_[i].file.seek(units_[i].offset + msToByte(offset_));
+                } else {
+                    renderer_.deallocateChannel(units_[i].render_ch);
+                    units_[i].render_ch = kDeallocatedChannel;
+                    units_[i].file.close();
+                    break;
                 }
             }
-            break;
-        case PcmRenderer::kStatePause:
-            break;
-        default:
-            break;
+
+            // output
+            if (renderer_.getWritableSize(units_[i].render_ch) < kPbBlockSize) {
+                break;
+            }
+            size_t read_size = units_[i].end - units_[i].file.position();
+            read_size = (read_size < kPbBlockSize) ? read_size : kPbBlockSize;
+            uint8_t buffer[read_size];
+            units_[i].file.read(buffer, read_size);
+            renderer_.write(units_[i].render_ch, buffer, read_size);
+        }
     }
 }
 
@@ -192,46 +189,50 @@ bool SDSink::setParam(int param_id, intptr_t value) {
     return NullFilter::setParam(param_id, value);
 }
 
-bool SDSink::sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) {
-    if (NOTE_NUMBER_MIN <= note && note <= NOTE_NUMBER_MAX) {
-        // find file
-        table_index_ = -1;
-        for (size_t i = 0; i < pcm_table_.size(); i++) {
-            if (note == pcm_table_[i].note) {
-                table_index_ = i;
-                break;
+bool SDSink::sendNoteOff(uint8_t note, uint8_t velocity, uint8_t channel) {
+    if (note < sizeof(units_) / sizeof(units_[0])) {
+        if (units_[note].render_ch >= 0) {
+            renderer_.deallocateChannel(units_[note].render_ch);
+            units_[note].render_ch = kDeallocatedChannel;
+            units_[note].file.close();
+        } else if (units_[note].render_ch == kUnallocatedChannel) {
+            if (units_[note].file) {
+                units_[note].render_ch = kDeallocatedChannel;
+                units_[note].file.close();
             }
         }
-        file_.close();
-        if (table_index_ < 0) {
-            error_printf("error: note is nothing(note=%d)\n", note);
-            return false;
-        }
-
-        SDClass sd;
-        file_ = sd.open(pcm_table_[table_index_].path.c_str());
-        if (!file_) {
-            error_printf("error: file open error(%s)\n", pcm_table_[table_index_].path.c_str());
-            return false;
-        }
-
-        remain_pcm_size_ = pcm_table_[table_index_].size;
-
-        uint32_t offset = msToByte(offset_);
-        file_.seek(pcm_table_[table_index_].offset + offset);
-        renderer_.clear(channel);
-        for (int i = 0; i < kPreloadFrameNum; i++) {
-            writeToRenderer(renderer_, channel, file_, offset, pcm_table_[table_index_].offset, pcm_table_[table_index_].size, &remain_pcm_size_, loop_);
-        }
-        renderer_.setState(PcmRenderer::kStateActive);
     }
     return true;
 }
 
-bool SDSink::sendNoteOff(uint8_t note, uint8_t velocity, uint8_t channel) {
-    renderer_.clear(channel);
-    renderer_.setState(PcmRenderer::kStatePause);
-    return true;
+bool SDSink::sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) {
+    if (velocity == 0) {
+        return sendNoteOff(note, velocity, channel);
+    }
+    if (note < sizeof(units_) / sizeof(units_[0])) {
+        if (units_[note].render_ch >= 0) {
+            renderer_.deallocateChannel(units_[note].render_ch);
+            units_[note].render_ch = kDeallocatedChannel;
+            units_[note].file.close();
+        } else if (units_[note].render_ch == kUnallocatedChannel) {
+            units_[note].render_ch = kDeallocatedChannel;
+            units_[note].file.close();
+        }
+
+        units_[note].file = File(units_[note].path.c_str());
+        if (units_[note].file) {
+            units_[note].file.seek(units_[note].offset + msToByte(offset_));
+            int render_channel = renderer_.allocateChannel();
+            units_[note].render_ch = (render_channel < 0) ? kUnallocatedChannel : render_channel;
+            if (units_[note].render_ch == kUnallocatedChannel) {
+                error_printf("[%s::%s] cannot allocate channel\n", kClassName, __func__);
+            } else {
+                update();
+            }
+        }
+        return true;
+    }
+    return false;
 }
 
 #endif  // ARDUINO_ARCH_SPRESENSE

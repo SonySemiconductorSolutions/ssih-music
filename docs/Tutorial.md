@@ -1,4 +1,4 @@
-# Sound Signal Processing Library for Spresense (20220826版)
+# Sound Signal Processing Library for Spresense (2022-10-28版)
 
 このライブラリは[Spresense](https://www.sony-semicon.co.jp/products/smart-sensing/spresense/)で簡単に楽器を開発するためのものです。
 電子楽器の演奏データを定めるMIDI規格をベースとしたAPIと、Spresenseのオーディオ入力・オーディオ出力を簡単に扱える機能ブロックを提供します。
@@ -24,23 +24,7 @@
 次の手順に従ってArduino IDE、Spresense Arduino board package、Sound Signal Processing Library for Spresenseをインストールします。
 
 1. [Spresense Arduino スタートガイド](https://developer.sony.com/develop/spresense/docs/arduino_set_up_ja.html)を参考に開発環境を構築する
-    * 1.2. Arduino IDE のインストール
-    * 1.4. Spresense Arduino board package のインストール
-        * `追加のボードマネージャのURL`には、下記2つのURLを設定してください。
-            ```
-            https://github.com/sonydevworld/spresense-arduino-compatible/releases/download/generic/package_spresense_index.json
-            https://github.com/TomonobuHayakawa/spresense-arduino-compatible/releases/download/common/package_spresense_instrument_index.json
-            ```
-            ![追加のボードマネージャーのURLの画像](/docs/BoardManagerA.png)
-        * ボードマネージャから、下記2つのパッケージをインストールしてください。
-            * `Spresense Reference Board` バージョン2.2.1
-            * `Spresense Instrument Board` バージョン2.2.1
-                * ![ボードパッケージインストールの画像](/docs/BoardManagerB.png)
-    * 2.2. Spresense ブートローダーのインストール
-2. Spresense Instrument Packageがインストールされていることを確認する
-    * Arduino IDEを開き、 `ツール` > `ボード` > `Spresense Instrument Boards` > `Spresense Instrument` を選択できることを確認します。
-    * メニューに現れない場合は、開発環境のセットアップ手順を最初からやり直してください。
-3. Sound Signal Processing Library for SpresenseをArduino IDEにインストールする
+2. Sound Signal Processing Library for SpresenseをArduino IDEにインストールする
     1. [リリースページ](https://github.com/SonySemiconductorSolutions/ssih-music/releases/)から Source code (zip) をダウンロードする
     2. Arduino IDEを開き、 `スケッチ` > `ライブラリをインクルード` > `.ZIP形式ライブラリをインストール` をクリック
     3. ダイアログが開いたら、1でダウンロードした ssih-music.zip を選択して `開く` をクリック
@@ -182,11 +166,11 @@ Src と Sink の間には、必要に応じて演奏データを加工するFilt
 
 これらのうち`sendNoteOn`関数と`sendNoteOff`関数には、下記のパラメータを指定します。
 
-| 引数              | 説明           | 設定できる範囲 | 制約                                  |
-| ---               | ---            | ---            | ---                                   |
-| 第1引数: note     | ノート番号     | 0～127         |                                       |
-| 第2引数: velocity | ベロシティ     | 0～127         | 未対応。1以上の値を設定してください。 |
-| 第3引数: channel  | チャンネル番号 | 0～15          | 未対応。0を指定してください。         |
+| 引数              | 説明           | 設定できる範囲 |
+| ---               | ---            | ---            |
+| 第1引数: note     | ノート番号     | 0～127         |
+| 第2引数: velocity | ベロシティ     | 0～127         |
+| 第3引数: channel  | チャンネル番号 | 0～15          |
 
 ## SDSink を使って音を出す
 

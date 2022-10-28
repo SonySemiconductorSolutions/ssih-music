@@ -10,6 +10,10 @@
 
 #include <Arduino.h>
 
+#include <File.h>
+#include <SDHCI.h>
+
+#include "BufferedFileReader.h"
 #include "YuruInstrumentFilter.h"
 
 // #define DEBUG (1)
@@ -26,14 +30,7 @@
 #define error_printf printf
 #endif  // DEBUG
 
-#include "TextScoreParser.h"
-
-#include <Arduino.h>
-
-#include <File.h>
-#include <SDHCI.h>
-
-#include "BufferedFileReader.h"
+static const char kClassName[] = "TextScoreParser";
 
 static const int kDefaultTick = 96;
 static const int kDefaultTempo = 120;
@@ -122,11 +119,14 @@ TextScoreParser::TextScoreParser(const String& path)
 }
 
 TextScoreParser::~TextScoreParser() {
+    if (file_) {
+        file_.close();
+    }
 }
 
 static void createSetTempo(ScoreParser::MidiMessage* msg, int tempo) {
     if (msg == nullptr) {
-        error_printf("error: internal error, msg is NULL\n");
+        error_printf("[%s::%s] error: internal error, msg is NULL\n", kClassName, __func__);
         return;
     }
     uint32_t usec = 60000000 / tempo;
@@ -137,44 +137,44 @@ static void createSetTempo(ScoreParser::MidiMessage* msg, int tempo) {
     msg->sysex_array[0] = (usec >> 16) & 0xFF;
     msg->sysex_array[1] = (usec >> 8) & 0xFF;
     msg->sysex_array[2] = (usec >> 0) & 0xFF;
-    debug_printf("-> %4d %02X %02X %02X %02X %02X %02X\n", msg->delta_time, msg->status_byte, msg->event_code, msg->event_length, msg->sysex_array[0],
-                 msg->sysex_array[1], msg->sysex_array[2]);
+    debug_printf("[%s::%s] -> %4d %02X %02X %02X %02X %02X %02X\n", kClassName, __func__, msg->delta_time, msg->status_byte, msg->event_code, msg->event_length,
+                 msg->sysex_array[0], msg->sysex_array[1], msg->sysex_array[2]);
 }
 
 static void createEndOfTrack(ScoreParser::MidiMessage* msg) {
     if (msg == nullptr) {
-        error_printf("error: internal error, msg is NULL\n");
+        error_printf("[%s::%s] error: internal error, msg is NULL\n", kClassName, __func__);
         return;
     }
     msg->delta_time = 0;
     msg->status_byte = ScoreParser::kMetaEvent;
     msg->event_code = ScoreParser::kEndOfTrack;
     msg->event_length = 0;
-    debug_printf("-> %4d %02X %02X %02X\n", msg->delta_time, msg->status_byte, msg->event_code, msg->event_length);
+    debug_printf("[%s::%s] -> %4d %02X %02X %02X\n", kClassName, __func__, msg->delta_time, msg->status_byte, msg->event_code, msg->event_length);
 }
 
 static void createNoteOff(ScoreParser::MidiMessage* msg, uint32_t delta_time, uint8_t note) {
     if (msg == nullptr) {
-        error_printf("error: internal error, msg is NULL\n");
+        error_printf("[%s::%s] error: internal error, msg is NULL\n", kClassName, __func__);
         return;
     }
     msg->delta_time = delta_time;
     msg->status_byte = TextScoreParser::kNoteOff | DEFAULT_CHANNEL;
     msg->data_byte1 = note & 0x7F;
     msg->data_byte2 = DEFAULT_VELOCITY;
-    debug_printf("-> %4d %02X %02X %02X\n", msg->delta_time, msg->status_byte, msg->data_byte1, msg->data_byte2);
+    debug_printf("[%s::%s] -> %4d %02X %02X %02X\n", kClassName, __func__, msg->delta_time, msg->status_byte, msg->data_byte1, msg->data_byte2);
 }
 
 static void createNoteOn(ScoreParser::MidiMessage* msg, uint32_t delta_time, uint8_t note) {
     if (msg == nullptr) {
-        error_printf("error: internal error, msg is NULL\n");
+        error_printf("[%s::%s] error: internal error, msg is NULL\n", kClassName, __func__);
         return;
     }
     msg->delta_time = delta_time;
     msg->status_byte = TextScoreParser::kNoteOn | DEFAULT_CHANNEL;
     msg->data_byte1 = note & 0x7F;
     msg->data_byte2 = DEFAULT_VELOCITY;
-    debug_printf("-> %4d %02X %02X %02X\n", msg->delta_time, msg->status_byte, msg->data_byte1, msg->data_byte2);
+    debug_printf("[%s::%s] -> %4d %02X %02X %02X\n", kClassName, __func__, msg->delta_time, msg->status_byte, msg->data_byte1, msg->data_byte2);
 }
 
 bool TextScoreParser::getMidiMessage(ScoreParser::MidiMessage* msg) {
@@ -201,7 +201,7 @@ bool TextScoreParser::getMidiMessage(ScoreParser::MidiMessage* msg) {
         } else if (ch == '#') {
             String line = reader_.readStringUntil('\n');
             line.trim();
-            debug_printf("\"#%s\"\n", line.c_str());
+            debug_printf("[%s::%s] \"#%s\"\n", kClassName, __func__, line.c_str());
             if (line.startsWith("BPMCHANGE ")) {
                 int tempo = getHeaderValue(line, ' ');
                 if (tempo > 0) {

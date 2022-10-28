@@ -24,9 +24,14 @@
 #define OUTPUTMIXER_RNDCLK_NORMAL (0)
 #define OUTPUTMIXER_RNDCLK_HIRESO (1)
 
+#define AS_BITLENGTH_16 (16)
 #define AS_CHANNEL_MONO (1)
 #define AS_CHANNEL_STEREO (2)
-#define AS_BITLENGTH_16 (16)
+#define AS_SAMPLINGRATE_16000 (16000)
+
+struct AudioObjReply {};
+
+bool AS_ReceiveObjectReply(MsgQueId msgq_id, AudioObjReply *reply);
 
 typedef void (*PcmProcDoneCallback)(int32_t identifier, bool is_end);
 

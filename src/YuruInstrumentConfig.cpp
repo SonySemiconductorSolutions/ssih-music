@@ -30,6 +30,8 @@
 #define error_printf printf
 #endif  // DEBUG
 
+static const char kClassName[] = "YuruInstrumentConfig";
+
 const int kMaxLineLength = 64;
 const int kBaudrate = 115200;  //< 115200bps
 const char kSectionName[] = "yurugakki";
@@ -72,7 +74,7 @@ int YuruInstrumentConfig::printAvailable(const char *param_str) {
         } else {
             param_id = strtol(param_str, &endp, 0);
             if (endp == nullptr || *endp != '\0') {
-                error_printf("parse error: parse '%s' as integer\n", param_str);
+                error_printf("[%s::%s] parse error: parse '%s' as integer\n", kClassName, __func__, param_str);
                 return -kErrInval;
             }
         }
@@ -98,7 +100,7 @@ int YuruInstrumentConfig::printParam(const char *param_str) {
         } else {
             param_id = strtol(param_str, &endp, 0);
             if (endp == nullptr || *endp != '\0') {
-                error_printf("parse error: parse '%s' as integer\n", param_str);
+                error_printf("[%s::%s] parse error: parse '%s' as integer\n", kClassName, __func__, param_str);
                 return -kErrInval;
             }
         }
@@ -148,13 +150,13 @@ int YuruInstrumentConfig::setParam(const char *param_str, const char *value_str)
         } else {
             param_id = strtol(param_str, &endp, 0);
             if (endp == nullptr || *endp != '\0') {
-                error_printf("parse error: parse '%s' as integer\n", param_str);
+                error_printf("[%s::%s] parse error: parse '%s' as integer\n", kClassName, __func__, param_str);
                 return -kErrInval;
             }
         }
         intptr_t value = strtol(value_str, &endp, 0);
         if (endp == nullptr || *endp != '\0') {
-            error_printf("parse error: parse '%s' as integer\n", value_str);
+            error_printf("[%s::%s] parse error: parse '%s' as integer\n", kClassName, __func__, value_str);
             return -kErrInval;
         }
         bool is_available = filter_->isAvailable(param_id);

@@ -13,39 +13,50 @@
 
 #include <File.h>
 
-#include "YuruInstrumentFilter.h"
 #include "SFZParser.h"
 #include "PcmRenderer.h"
-#include "WavReader.h"
-#include "path_util.h"
+#include "YuruInstrumentFilter.h"
 
 class SFZSink : public NullFilter, public SFZHandler {
 public:
-    enum SfzHeader { kHUnSppported, kGlobal, kGroup, kControl, kRegion };
-
-    enum LoopMode { kNoSettingLoopMode, kNoLoop, kOneShot, kLoopContinuous, kLoopSustain };
-
+    enum Header { kInvalidHeader, kGlobal, kGroup, kControl, kRegion };
     enum Opcode {
         kOpcodeSample,
+        kOpcodeLochan,
+        kOpcodeHichan,
         kOpcodeLokey,
         kOpcodeHikey,
+        kOpcodeLovel,
+        kOpcodeHivel,
+        kOpcodeLorand,
+        kOpcodeHirand,
+        kOpcodeSeqLength,
+        kOpcodeSeqPosition,
         kOpcodeSwLokey,
         kOpcodeSwHikey,
         kOpcodeSwLast,
+        kOpcodeGroup,
+        kOpcodeOffBy,
         kOpcodeOffset,
         kOpcodeEnd,
         kOpcodeCount,
         kOpcodeLoopMode,
         kOpcodeLoopStart,
         kOpcodeLoopEnd,
+        kOpcodeDefaultPath,
         kOpcodeSwDefault,
         kOpcodeMax
     };
+    enum LoopMode { kInvalidLoopMode, kNoLoop, kOneShot, kLoopContinuous, kLoopSustain };
 
     struct Region {
         String sample;
+        uint8_t lochan;
+        uint8_t hichan;
         uint8_t lokey;
         uint8_t hikey;
+        uint8_t lovel;
+        uint8_t hivel;
         uint8_t sw_last;
         uint32_t offset;
         uint32_t end;
@@ -67,61 +78,59 @@ public:
         uint32_t opcode[kOpcodeMax];
     };
 
+    struct PlaybackUnit {
+        uint8_t note;
+        uint8_t channel;
+        int render_ch;
+        Region* region;
+        File file;
+        uint32_t loop;
+    };
+
     friend class SfzTest;
 
-    SFZSink(const String& sfz_filename);
-
+    SFZSink(const String& sfz_path);
     ~SFZSink();
 
+    // Filter, NullFilter
     bool begin() override;
-
     void update() override;
-
     bool isAvailable(int param_id) override;
-
     intptr_t getParam(int param_id) override;
-
     bool setParam(int param_id, intptr_t value) override;
-
     bool sendNoteOff(uint8_t note, uint8_t velocity, uint8_t channel) override;
-
     bool sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) override;
 
+    // SFZHandler
     void startSfz() override;
-
     void endSfz() override;
-
-    void header(const String& header) override;
-
+    void startHeader(const String& header) override;
+    void endHeader(const String& header) override;
     void opcode(const String& opcode, const String& value) override;
 
 private:
-    // for parse
-    String sfz_folder_path_;
+    // for play
+    String sfz_path_;
     std::vector<Region> regions_;
+    std::vector<PlaybackUnit> playback_units_;
+    PcmRenderer renderer_;
+    int volume_;
+
+    // for parse
     OpcodeContainer global_;
     OpcodeContainer group_;
     OpcodeContainer region_;
-    SfzHeader current_header_;
-    uint32_t current_group_;
+    Header header_;
+    uint32_t group_id_;
     int regions_in_group_;
+    String default_path_;
     uint8_t sw_lokey_;
     uint8_t sw_hikey_;
     uint8_t sw_last_;
 
-    // for play
-    const Region* playing_region_;
-    File file_;
-    uint32_t loop_count_;
-
-    int volume_;
-    PcmRenderer renderer_;
-
-    void startSound();
-
-    void loadSound(int frame);
-
-    void stopSound();
+    PlaybackUnit* startPlayback(uint8_t note, uint8_t velocity, uint8_t channel, Region* region);
+    void continuePlayback(PlaybackUnit* unit, int frames);
+    void stopPlayback(PlaybackUnit* unit);
 };
 
 #endif  // SFZ_SINK_H_

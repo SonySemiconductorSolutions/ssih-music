@@ -12,9 +12,9 @@
 
 #include <File.h>
 #include <FrontEnd.h>
+#include <MemoryUtil.h>
 #include <MP.h>
 #include <SDHCI.h>
-#include <Arduino.h>
 
 //#define DEBUG (1)
 
@@ -31,6 +31,8 @@
 #define error_printf printf
 #endif  // if defined(DEBUG)
 
+static const char kClassName[] = "VoiceCapture";
+
 static const int kGainMin = 0;
 static const int kGainMax = 210;
 static const int kDefaultGain = 0;
@@ -38,8 +40,6 @@ static const int kDefaultGain = 0;
 static const int kInputlevelMin = 0;
 static const int kInputlevelMax = 200;
 static const int kDefaultInputlevel = 100;
-
-static uint32_t kFrameNum = 0;
 
 static FrontEnd* g_frontend = FrontEnd::getInstance();
 static VoiceCapture* g_voice_capture = nullptr;
@@ -61,7 +61,17 @@ static void frontendDoneCallback(AsPcmDataParam param) {
 }
 
 VoiceCapture::VoiceCapture(Filter& filter)
-    : BaseFilter(filter), gain_(kDefaultGain), input_level_(kDefaultInputlevel), result_(nullptr), is_recording_(false), dump_buffer_(nullptr), wp_(0), rp_(0) {
+    : BaseFilter(filter),
+      gain_(kDefaultGain),
+      input_level_(kDefaultInputlevel),
+      result_(nullptr),
+      capture_frames_(0),
+      send_frames_(0),
+      receive_frames_(0),
+      is_recording_(false),
+      dump_buffer_(nullptr),
+      wp_(0),
+      rp_(0) {
 }
 
 VoiceCapture::~VoiceCapture() {
@@ -80,15 +90,15 @@ bool VoiceCapture::begin() {
 
     ok = BaseFilter::begin();
     if (!ok) {
-        error_printf("error: failed BaseFilter::begin => %d\n", ok);
+        error_printf("[%s::%s] error: failed BaseFilter::begin => %d\n", kClassName, __func__, ok);
         return false;
     }
 
     // initialize MP
-    debug_printf("init MP\n");
+    debug_printf("[%s::%s] init MP\n", kClassName, __func__);
     ret = MP.begin(SUB_CORE_ID);
     if (ret < 0) {
-        error_printf("error: failed MP.begin => %d\n", ret);
+        error_printf("[%s::%s] error: failed MP.begin => %d\n", kClassName, __func__, ret);
         return false;
     }
     MP.RecvTimeout(MP_RECV_POLLING);
@@ -97,43 +107,66 @@ bool VoiceCapture::begin() {
     AsDataDest callback = {0};
     callback.cb = frontendDoneCallback;
 
-    debug_printf("init capture\n");
+    debug_printf("[%s::%s] init capture\n", kClassName, __func__);
 
     err = g_frontend->begin();
     if (err != FRONTEND_ECODE_OK) {
-        error_printf("error: failed FrontEnd.begin => %d\n", err);
+        error_printf("[%s::%s] error: failed FrontEnd.begin => %d\n", kClassName, __func__, err);
         return false;
     }
 
     err = g_frontend->activate();
     if (err != FRONTEND_ECODE_OK) {
-        error_printf("error: failed FrontEnd.activate => %d\n", err);
+        error_printf("[%s::%s] error: failed FrontEnd.activate => %d\n", kClassName, __func__, err);
         return false;
     }
 
+#if 0
     err = g_frontend->init(AS_CHANNEL_MONO, AS_BITLENGTH_16,
                            CAP_SAMPLE_CNT * 3,  // H/W-in:48KHz SRC-out:16KHz
                            AsDataPathCallback, callback, AsMicFrontendPreProcSrc, "/mnt/sd0/BIN/SRC");
     if (err != FRONTEND_ECODE_OK) {
-        error_printf("error: failed FrontEnd.init => %d\n", err);
+        error_printf("[%s::%s] error: failed FrontEnd.init => %d\n", kClassName, __func__, err);
         return false;
     }
+#else
+    AsInitMicFrontendParam frontend_init;
+    frontend_init.channel_number = AS_CHANNEL_MONO;
+    frontend_init.bit_length = AS_BITLENGTH_16;
+    frontend_init.samples_per_frame = CAP_SAMPLE_CNT * 3;
+    frontend_init.preproc_type = AsMicFrontendPreProcSrc;
+    strncpy(frontend_init.dsp_path, "/mnt/sd0/BIN/SRC", sizeof(frontend_init.dsp_path));
+    frontend_init.data_path = AsDataPathCallback;
+    frontend_init.dest = callback;
+    frontend_init.out_fs = AS_SAMPLINGRATE_16000;
+    ok = AS_InitMicFrontend(&frontend_init);
+    if (!ok) {
+        error_printf("error: failed AS_InitMicFrontend => %d\n", ok);
+        return false;
+    }
+    AudioObjReply reply;
+    ok = AS_ReceiveObjectReply(MSGQ_AUD_MGR, &reply);
+    if (!ok) {
+        error_printf("error: failed AS_ReceiveObjectReply => %d\n", ok);
+        return false;
+    }
+#endif
 
-    debug_printf("start capture.\n");
+    debug_printf("[%s::%s] start capture.\n", kClassName, __func__);
 
     err = g_frontend->setMicGain(gain_);
     if (err != FRONTEND_ECODE_OK) {
-        error_printf("error: failed FrontEnd.setMicGain => %d\n", err);
+        error_printf("[%s::%s] error: failed FrontEnd.setMicGain => %d\n", kClassName, __func__, err);
         return false;
     }
 
     err = g_frontend->start();
     if (err != FRONTEND_ECODE_OK) {
-        error_printf("error: failed FrontEnd.start => %d\n", err);
+        error_printf("[%s::%s] error: failed FrontEnd.start => %d\n", kClassName, __func__, err);
         return false;
     }
 
-    debug_printf("VoiceCapture: ready\n");
+    debug_printf("[%s::%s] VoiceCapture: ready\n", kClassName, __func__);
 
     return true;
 }
@@ -146,6 +179,7 @@ void VoiceCapture::update() {
     VoiceCapture::Result* result = nullptr;
     int ret = MP.Recv(&rcvid, &result, SUB_CORE_ID);
     if (ret >= 0) {
+        receive_frames_++;
         if (result) {
             analyze_result = *result;
             has_result = true;
@@ -156,8 +190,8 @@ void VoiceCapture::update() {
     }
     result_ = nullptr;
     if (has_result) {
-        debug_printf("send time:%d, result time:%d\n", analyze_result.capture_time, analyze_result.result_time);
-        debug_printf("frame num:%d\n", analyze_result.id);
+        debug_printf("[%s::%s] send time:%d, result time:%d\n", kClassName, __func__, (int)analyze_result.capture_time, (int)analyze_result.result_time);
+        debug_printf("[%s::%s] frame num:%d\n", kClassName, __func__, analyze_result.id);
         onCapture(analyze_result.freq_numer, analyze_result.freq_denom, analyze_result.volume);
     }
     BaseFilter::update();
@@ -193,7 +227,7 @@ bool VoiceCapture::setParam(int param_id, intptr_t value) {
             err_t err = FRONTEND_ECODE_OK;
             err = g_frontend->setMicGain(gain_);
             if (err != FRONTEND_ECODE_OK) {
-                error_printf("error: failed FrontEnd.setMicGain %d\n", err);
+                error_printf("[%s::%s] error: failed FrontEnd.setMicGain %d\n", kClassName, __func__, err);
             }
             return (err == FRONTEND_ECODE_OK);
         }
@@ -256,19 +290,12 @@ void VoiceCapture::onFrontendDone(AsPcmDataParam param) {
             }
         }
         capture.capture_time = millis();
-        capture.id = kFrameNum++;
+        capture.id = capture_frames_++;
         capture.reserved = 0;
 
-        MP.Send(MP_MTOS_ID, &capture, SUB_CORE_ID);
-
-        int8_t rcvid = -1;
-        VoiceCapture::Result* result = nullptr;
-        int ret = MP.Recv(&rcvid, &result, SUB_CORE_ID);
-        if (ret >= 0) {
-            if (result) {
-                result_ = result;
-                // debug_printf("VoiceCapture: sweeped\n");
-            }
+        if (send_frames_ - receive_frames_ < CONFIG_CXD56_CPUFIFO_NBUFFERS) {
+            MP.Send(MP_MTOS_ID, &capture, SUB_CORE_ID);
+            send_frames_++;
         }
 
         if (is_recording_ && dump_buffer_ && wp_ == 0) {

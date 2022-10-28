@@ -9,6 +9,8 @@
 
 #include "Arduino.h"
 
+#define MSGQ_AUD_MGR (1)
+
 #define SECTION_NO0 (0)
 #define SECTION_NO1 (1)
 

@@ -31,6 +31,8 @@
 #define error_printf printf
 #endif  // DEBUG
 
+static const char kClassName[] = "YuruInstrumentConsole";
+
 const int kMaxLineLength = 64;
 const int kBaudrate = 115200;  //< 115200bps
 
@@ -75,7 +77,7 @@ static int PrintLs(const char *path) {
         dir.close();
         return YuruInstrumentConfig::kNoError;
     } else {
-        error_printf("error: '%s': No such file or directory\n", path);
+        error_printf("[%s::%s] error: '%s': No such file or directory\n", kClassName, __func__, path);
         return -YuruInstrumentConfig::kErrNoEnt;
     }
 }
@@ -114,7 +116,7 @@ static int CommandRm(YuruInstrumentConsole *console, int argc, char *argv[]) {
                 return -YuruInstrumentConfig::kErrPerm;
             }
         } else {
-            error_printf("error: '%s': No such file or directory\n", argv[i]);
+            error_printf("[%s::%s] error: '%s': No such file or directory\n", kClassName, __func__, argv[i]);
             return -YuruInstrumentConfig::kErrNoEnt;
         }
     }
@@ -130,7 +132,7 @@ static int CommandRmdir(YuruInstrumentConsole *console, int argc, char *argv[]) 
                 return -YuruInstrumentConfig::kErrInval;
             }
         } else {
-            error_printf("error: '%s': No such file or directory\n", argv[i]);
+            error_printf("[%s::%s] error: '%s': No such file or directory\n", kClassName, __func__, argv[i]);
             return -YuruInstrumentConfig::kErrNoEnt;
         }
     }
@@ -150,7 +152,7 @@ static int CommandCat(YuruInstrumentConsole *console, int argc, char *argv[]) {
             printf("\n");
             file.close();
         } else {
-            error_printf("error: '%s': No such file or directory\n", argv[i]);
+            error_printf("[%s::%s] error: '%s': No such file or directory\n", kClassName, __func__, argv[i]);
             return -YuruInstrumentConfig::kErrNoEnt;
         }
     }
@@ -175,7 +177,7 @@ static int CommandOd(YuruInstrumentConsole *console, int argc, char *argv[]) {
             printf("\n");
             file.close();
         } else {
-            error_printf("error: '%s': No such file or directory\n", argv[i]);
+            error_printf("[%s::%s] error: '%s': No such file or directory\n", kClassName, __func__, argv[i]);
             return -YuruInstrumentConfig::kErrNoEnt;
         }
     }
@@ -301,17 +303,17 @@ static int CommandSendNoteOff(YuruInstrumentConsole *console, int argc, char *ar
         uint8_t channel = 0;
         note = strtol(argv[1], &endp, 0);
         if (endp == nullptr || *endp != '\0') {
-            error_printf("parse error: parse '%s' as integer\n", argv[1]);
+            error_printf("[%s::%s] parse error: parse '%s' as integer\n", kClassName, __func__, argv[1]);
             return -YuruInstrumentConfig::kErrInval;
         }
         velocity = strtol(argv[2], &endp, 0);
         if (endp == nullptr || *endp != '\0') {
-            error_printf("parse error: parse '%s' as integer\n", argv[2]);
+            error_printf("[%s::%s] parse error: parse '%s' as integer\n", kClassName, __func__, argv[2]);
             return -YuruInstrumentConfig::kErrInval;
         }
         channel = strtol(argv[3], &endp, 0);
         if (endp == nullptr || *endp != '\0') {
-            error_printf("parse error: parse '%s' as integer\n", argv[3]);
+            error_printf("[%s::%s] parse error: parse '%s' as integer\n", kClassName, __func__, argv[3]);
             return -YuruInstrumentConfig::kErrInval;
         }
         if (filter) {
@@ -335,17 +337,17 @@ static int CommandSendNoteOn(YuruInstrumentConsole *console, int argc, char *arg
         uint8_t channel = 0;
         note = strtol(argv[1], &endp, 0);
         if (endp == nullptr || *endp != '\0') {
-            error_printf("parse error: parse '%s' as integer\n", argv[1]);
+            error_printf("[%s::%s] parse error: parse '%s' as integer\n", kClassName, __func__, argv[1]);
             return -YuruInstrumentConfig::kErrInval;
         }
         velocity = strtol(argv[2], &endp, 0);
         if (endp == nullptr || *endp != '\0') {
-            error_printf("parse error: parse '%s' as integer\n", argv[2]);
+            error_printf("[%s::%s] parse error: parse '%s' as integer\n", kClassName, __func__, argv[2]);
             return -YuruInstrumentConfig::kErrInval;
         }
         channel = strtol(argv[3], &endp, 0);
         if (endp == nullptr || *endp != '\0') {
-            error_printf("parse error: parse '%s' as integer\n", argv[3]);
+            error_printf("[%s::%s] parse error: parse '%s' as integer\n", kClassName, __func__, argv[3]);
             return -YuruInstrumentConfig::kErrInval;
         }
         if (filter) {
@@ -431,7 +433,7 @@ static int ExecuteCommand(YuruInstrumentConsole *console, int argc, char *argv[]
         if (strcmp(g_command_spec[i].name, argv[0]) == 0) {
             int err = g_command_spec[i].func(console, argc, argv);
             if (err != 0) {
-                error_printf("error code: %d\n", err);
+                error_printf("[%s::%s] error code: %d\n", kClassName, __func__, err);
             }
         }
     }

@@ -15,7 +15,9 @@ public:
         bottom_ = top_ + sample;
         wptr_ = rptr_ = top_;
     };
-    ~RingBuff() { free(top_); };
+    ~RingBuff() {
+        free(top_);
+    };
 
     int put(q15_t *buf, int sample) {
         if (sample < (bottom_ - wptr_)) {
@@ -55,7 +57,7 @@ public:
     };
 
     int get(float *buf, int sample, int advance = 0) {
-        if(advance <= 0) {
+        if (advance <= 0) {
             advance = sample;
         }
         if ((rptr_ + sample) < bottom_) {
@@ -65,10 +67,10 @@ public:
             int part = bottom_ - rptr_;
             arm_q15_to_float(rptr_, buf, part);
             arm_q15_to_float(top_, &buf[part], sample - part);
-            if (sample - part > advance) {
-                rptr_ = top_ + advance;
+            if (rptr_ + advance >= bottom_) {
+                rptr_ = top_ + (rptr_ + advance - bottom_);
             } else {
-                rptr_ = top_ + sample - part;
+                rptr_ += advance;
             }
         }
         // printf("[%4d +%4d] (w:0x%08x +r:0x%08x)\n", stored(), remain(),
@@ -90,4 +92,4 @@ private:
     q15_t *rptr_;
 };
 
-#endif //RING_BUFF_H_
+#endif  // RING_BUFF_H_

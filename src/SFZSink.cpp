@@ -17,6 +17,10 @@
 #include <Arduino.h>
 
 #include <SDHCI.h>
+#include <Storage.h>
+
+#include "path_util.h"
+#include "WavReader.h"
 
 // #define DEBUG (1)
 
@@ -32,6 +36,8 @@
 #define debug_printf nop
 #define error_printf printf
 #endif  // if defined(DEBUG)
+
+static const char kClassName[] = "SFZSink";
 
 struct OpcodeSpec {
     const char* opcode_str;
@@ -51,26 +57,13 @@ const int kPbBlockSize = kPbSampleCount * (kPbBitDepth / 8) * kPbChannelCount;
 const int kPbCacheSize = (24 * 1024);
 
 // cache parameter
-const int kPreLoadFrameNum = 3;
-const int kLoadFrameNum = 3;
+const int kPreloadFrames = 3;
+const int kLoadFrames = 10;
 
-static void writeToRenderer(PcmRenderer& renderer, int ch, File& file, size_t end) {
-    trace_printf("enter: %s(%d, %s, %d, %d)\n", __func__, ch, file.name(), (int)file.position(), (int)end);
-    if (renderer.getWritableSize(ch) < kPbBlockSize) {
-        return;
-    }
-    size_t pos = file.position();
-    if (pos >= end) {
-        return;
-    }
-    size_t read_size = end - pos;
-    read_size = (read_size < kPbBlockSize) ? read_size : kPbBlockSize;
-    uint8_t buffer[read_size];
-    file.read(buffer, read_size);
-    renderer.write(ch, buffer, read_size);
-}
+const static int kUnallocatedChannel = -1;
+const static int kDeallocatedChannel = -2;
 
-static SFZSink::SfzHeader convertHeaderToNum(const String& str) {
+static SFZSink::Header convertHeaderToEnum(const String& str) {
     if (str == "global") {
         return SFZSink::kGlobal;
     } else if (str == "group") {
@@ -80,7 +73,7 @@ static SFZSink::SfzHeader convertHeaderToNum(const String& str) {
     } else if (str == "region") {
         return SFZSink::kRegion;
     } else {
-        return SFZSink::kHUnSppported;
+        return SFZSink::kInvalidHeader;
     }
 }
 
@@ -184,26 +177,30 @@ static SFZSink::Region buildRegion(const SFZSink::OpcodeContainer& container) {
     SFZSink::Region region;
 
     region.sample = normalizePath(container.sample);
-    SDClass sdcard;
-    if (sdcard.begin()) {
-        File file = sdcard.open(region.sample);
-        if (file) {
-            WavReader wav = WavReader(file);
-            region.pcm_offset = wav.getPcmOffset();
-            region.pcm_size = wav.getPcmSize();
-            file.close();
-        } else {
-            error_printf("SFZSink: cannot open '%s'\n", region.sample.c_str());
-            region.pcm_offset = 0;
-            region.pcm_size = 0;
-        }
+    region.pcm_offset = 0;
+    region.pcm_size = 0;
+    File file = File(region.sample.c_str());
+    if (!file) {
+        error_printf("[%s::%s] cannot open \"%s\"\n", kClassName, __func__, region.sample.c_str());
     }
+    if (file.isDirectory()) {
+        error_printf("[%s::%s] \"%s\" is directory\n", kClassName, __func__, region.sample.c_str());
+    } else {
+        WavReader wav = WavReader(file);
+        region.pcm_offset = wav.getPcmOffset();
+        region.pcm_size = wav.getPcmSize();
+    }
+    file.close();
     region.silence = container.silence;
 
     size_t pcm_samples = region.pcm_size / kSampleSize;
 
+    region.lochan = container.opcode[SFZSink::kOpcodeLochan];
+    region.hichan = container.opcode[SFZSink::kOpcodeHichan];
     region.lokey = container.opcode[SFZSink::kOpcodeLokey];
     region.hikey = container.opcode[SFZSink::kOpcodeHikey];
+    region.lovel = container.opcode[SFZSink::kOpcodeLovel];
+    region.hivel = container.opcode[SFZSink::kOpcodeHivel];
     region.sw_last = container.opcode[SFZSink::kOpcodeSwLast];
     size_t offset_samples = (pcm_samples < container.opcode[SFZSink::kOpcodeOffset]) ? pcm_samples : container.opcode[SFZSink::kOpcodeOffset];
     region.offset = region.pcm_offset + offset_samples * kSampleSize;
@@ -242,79 +239,80 @@ static SFZSink::Region buildRegion(const SFZSink::OpcodeContainer& container) {
     return region;
 }
 
-SFZSink::SFZSink(const String& sfz_filename)
+SFZSink::SFZSink(const String& sfz_path)
     : NullFilter(),
       SFZHandler(),
-      sfz_folder_path_(getFolderPath(sfz_filename)),
+      sfz_path_(sfz_path),
       regions_(),
+      playback_units_(),
+      renderer_(kPbSampleFrq, kPbBitDepth, kPbChannelCount, kPbSampleCount, kPbCacheSize, 4),
+      volume_(0),
       global_(),
       group_(),
       region_(),
-      current_header_(kHUnSppported),
-      current_group_(0),
+      header_(kInvalidHeader),
+      group_id_(0),
       regions_in_group_(-1),
+      default_path_(""),
       sw_lokey_(NOTE_NUMBER_MIN),
       sw_hikey_(NOTE_NUMBER_MAX),
-      sw_last_(INVALID_NOTE_NUMBER),
-      playing_region_(nullptr),
-      file_(),
-      loop_count_(0),
-      volume_(0),
-      renderer_(kPbSampleFrq, kPbBitDepth, kPbChannelCount, kPbSampleCount, kPbCacheSize, 1) {
-    SDClass sdcard;
-    if (!sdcard.begin()) {
-        error_printf("error: cannot access sdcard\n");
-        return;
-    }
-
-    File sfz_file = sdcard.open(sfz_filename.c_str());
-    if (!sfz_file) {
-        error_printf("error: file open error(%s)\n", sfz_filename.c_str());
-        return;
-    }
-    SFZParser sfz_parser;
-    sfz_parser.parse(sfz_file, sfz_filename, this);
-    sfz_file.close();
-
-#if DEBUG
-    debug_printf("regions: %d\n", (int)regions_.size());
-    for (size_t i = 0; i < regions_.size(); i++) {
-        // clang-format off
-        debug_printf("%u/%u: \"%s\" lk,hk,sl:%d,%d,%d o,e:%d,%d cnt,lm:%d,%d ls,le:%d,%d\n",
-                     (unsigned int)(i + 1), (unsigned int)regions_.size(), regions_[i].sample.c_str(),
-                     regions_[i].lokey, regions_[i].hikey, regions_[i].sw_last,
-                     regions_[i].offset, regions_[i].end,
-                     regions_[i].count, (int)regions_[i].loop_mode,
-                     regions_[i].loop_start, regions_[i].loop_end);
-        // clang-format on
-    }
-#endif
+      sw_last_(INVALID_NOTE_NUMBER) {
 }
 
 SFZSink::~SFZSink() {
 }
 
 bool SFZSink::begin() {
+    bool ret = true;
     NullFilter::begin();
-    debug_printf("start playback\n");
-    renderer_.setState(PcmRenderer::kStateReady);
-    renderer_.begin();
-    renderer_.clear(0);
-    for (int i = 0; i < kPreLoadFrameNum; i++) {
-        if (!renderer_.render()) {
-            break;
+
+    debug_printf("[%s::%s] loading sfz\n", kClassName, __func__);
+
+    File file;
+    if (sfz_path_.startsWith("/")) {
+        file = File(sfz_path_.c_str());
+    } else {
+        SDClass sdcard;
+        if (!sdcard.begin()) {
+            error_printf("[%s::%s] error: cannot access sdcard\n", kClassName, __func__);
+            ret = false;
+        } else {
+            file = sdcard.open(sfz_path_);
+            sfz_path_ = file.name();
         }
     }
-    return true;
+    if (!file) {
+        error_printf("[%s::%s] error: cannot open \"%s\"\n", kClassName, __func__, sfz_path_.c_str());
+        ret = false;
+    } else {
+        SFZParser parser;
+        parser.parse(file, sfz_path_, this);
+        file.close();
+        debug_printf("[%s::%s] regions: %d\n", kClassName, __func__, (int)regions_.size());
+#if DEBUG
+        for (size_t i = 0; i < regions_.size(); i++) {
+            debug_printf("[%s::%s] %d/%d: \"%s\" lk=%d,hk=%d,sl=%d o=%d,e=%d lm=%d,c=%d ls=%d,le=%d\n", kClassName, __func__, (int)(i + 1),
+                         (int)regions_.size(), regions_[i].sample.c_str(), regions_[i].lokey, regions_[i].hikey, regions_[i].sw_last, regions_[i].offset,
+                         regions_[i].end, (int)regions_[i].loop_mode, regions_[i].count, regions_[i].loop_start, regions_[i].loop_end);
+        }
+#endif
+    }
+
+    debug_printf("[%s::%s] start playback\n", kClassName, __func__);
+    renderer_.begin();
+
+    return ret;
 }
 
 void SFZSink::update() {
     NullFilter::update();
-    loadSound(kLoadFrameNum);
+    for (auto& e : playback_units_) {
+        continuePlayback(&e, kLoadFrames);
+    }
 }
 
 bool SFZSink::isAvailable(int param_id) {
-    trace_printf("SFZSink::isAvailable(%d)\n", param_id);
+    trace_printf("[%s::%s] (%d)\n", kClassName, __func__, param_id);
     if (param_id == Filter::PARAMID_OUTPUT_LEVEL) {
         return true;
     }
@@ -322,7 +320,7 @@ bool SFZSink::isAvailable(int param_id) {
 }
 
 intptr_t SFZSink::getParam(int param_id) {
-    trace_printf("SFZSink::getParam(%d)\n", param_id);
+    trace_printf("[%s::%s] (%d)\n", kClassName, __func__, param_id);
     if (param_id == Filter::PARAMID_OUTPUT_LEVEL) {
         return volume_;
     }
@@ -330,7 +328,7 @@ intptr_t SFZSink::getParam(int param_id) {
 }
 
 bool SFZSink::setParam(int param_id, intptr_t value) {
-    trace_printf("SFZSink::setParam(%d, %d)\n", param_id, value);
+    trace_printf("[%s::%s] (%d, %d)\n", kClassName, __func__, param_id, (int)value);
     if (param_id == Filter::PARAMID_OUTPUT_LEVEL) {
         volume_ = constrain(value, -1020, 120);
         renderer_.setVolume(volume_, 0, 0);
@@ -340,24 +338,31 @@ bool SFZSink::setParam(int param_id, intptr_t value) {
 }
 
 bool SFZSink::sendNoteOff(uint8_t note, uint8_t velocity, uint8_t channel) {
-    debug_printf("SFZSink::sendNoteOff(%d,%d,%d)\n", note, velocity, channel);
-    if (playing_region_ && playing_region_->loop_mode == kOneShot) {
-        debug_printf("%s: playing one_shot\n", __func__);
-        return true;
+    debug_printf("[%s::%s] (%d, %d, %d)\n", kClassName, __func__, note, velocity, channel);
+    for (auto& e : playback_units_) {
+        if (e.render_ch == kDeallocatedChannel) {
+            continue;
+        }
+        if (e.channel != channel) {
+            continue;
+        }
+        if (e.region->loop_mode == kOneShot) {
+            continue;
+        }
+        if (e.note == note) {
+            stopPlayback(&e);
+            break;
+        }
     }
-    stopSound();
-
     return true;
 }
 
 bool SFZSink::sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) {
-    debug_printf("SFZSink::sendNoteOn(%d,%d,%d)\n", note, velocity, channel);
+    debug_printf("[%s::%s] (%d, %d, %d)\n", kClassName, __func__, note, velocity, channel);
 
-    if (playing_region_ && playing_region_->loop_mode == kOneShot) {
-        debug_printf("%s: playing one_shot\n", __func__);
-        return true;
+    if (note < NOTE_NUMBER_MIN || NOTE_NUMBER_MAX < note) {
+        return false;
     }
-
     if (velocity == 0) {
         return sendNoteOff(note, velocity, channel);
     }
@@ -366,27 +371,36 @@ bool SFZSink::sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) {
         sw_last_ = note;
     }
 
-    playing_region_ = nullptr;
-    for (const auto& e : regions_) {
+    for (const auto& e : playback_units_) {
+        if (e.channel == channel && e.region->loop_mode == kOneShot) {
+            debug_printf("[%s::%s] playing one_shot\n", kClassName, __func__);
+            return true;
+        }
+    }
+
+    Region* region = nullptr;
+    for (auto& e : regions_) {
         if (e.sw_last != INVALID_NOTE_NUMBER && e.sw_last != sw_last_) {
             continue;
         }
-        if (e.lokey <= note && note <= e.hikey) {
-            playing_region_ = &e;
-            break;
+        if (channel < e.lochan || e.hichan < channel) {
+            continue;
         }
+        if (note < e.lokey || e.hikey < note) {
+            continue;
+        }
+        if (velocity < e.lovel || e.hivel < velocity) {
+            continue;
+        }
+        region = &e;
+        break;
     }
-    if (playing_region_ == nullptr) {
-        error_printf("%s: no match region for %d\n", __func__, note);
+    if (region == nullptr) {
+        error_printf("[%s::%s] no match region for note=%d,channel=%d\n", kClassName, __func__, note, channel);
         return false;
     }
 
-    if (note == INVALID_NOTE_NUMBER) {
-        sendNoteOff(note, DEFAULT_VELOCITY, DEFAULT_CHANNEL);
-    } else {
-        debug_printf("%s: play note %d\n", __func__, note);
-        startSound();
-    }
+    startPlayback(note, velocity, channel, region);
 
     return true;
 }
@@ -400,11 +414,21 @@ void SFZSink::startSfz() {
         global_.silence = false;
         global_.specified = 0;
         global_.opcode[kOpcodeSample] = 0;
+        global_.opcode[kOpcodeLochan] = 0;
+        global_.opcode[kOpcodeHichan] = 15;
         global_.opcode[kOpcodeLokey] = NOTE_NUMBER_MIN;
         global_.opcode[kOpcodeHikey] = NOTE_NUMBER_MAX;
+        global_.opcode[kOpcodeLovel] = 0;
+        global_.opcode[kOpcodeHivel] = 127;
+        global_.opcode[kOpcodeLorand] = 0;  // TODO: set 0 by Qm.n (Q notation)
+        global_.opcode[kOpcodeHirand] = 1;  // TODO: set 1 by Qm.n (Q notation)
+        global_.opcode[kOpcodeSeqLength] = 1;
+        global_.opcode[kOpcodeSeqPosition] = 1;
         global_.opcode[kOpcodeSwLokey] = NOTE_NUMBER_MIN;
         global_.opcode[kOpcodeSwHikey] = NOTE_NUMBER_MAX;
         global_.opcode[kOpcodeSwLast] = INVALID_NOTE_NUMBER;
+        global_.opcode[kOpcodeGroup] = 0;
+        global_.opcode[kOpcodeOffBy] = 0;
         global_.opcode[kOpcodeOffset] = 0;
         global_.opcode[kOpcodeEnd] = 0;
         global_.opcode[kOpcodeCount] = 1;
@@ -416,34 +440,25 @@ void SFZSink::startSfz() {
     group_ = global_;
     region_ = group_;
 
+    default_path_ = "";
     sw_lokey_ = NOTE_NUMBER_MIN;
     sw_hikey_ = NOTE_NUMBER_MAX;
     sw_last_ = INVALID_NOTE_NUMBER;
-    current_header_ = kHUnSppported;
-    current_group_ = 0;
+    header_ = kInvalidHeader;
+    group_id_ = 0;
     regions_in_group_ = -1;
 }
 
 void SFZSink::endSfz() {
-    header("end last header");
+    trace_printf("[%s::%s] ()\n", kClassName, __func__);
 }
 
-void SFZSink::header(const String& header) {
-    trace_printf("SFZSink::header('%s')\n", header.c_str());
-    // end header
-    if (current_header_ == kGlobal) {
-        global_ = region_;
-    } else if (current_header_ == kGroup) {
-        group_ = region_;
-    } else if (current_header_ == kRegion) {
-        if (region_.is_valid) {
-            regions_.push_back(buildRegion(region_));
-        }
-    }
+void SFZSink::startHeader(const String& header) {
+    trace_printf("[%s::%s] (\"%s\")\n", kClassName, __func__, header.c_str());
 
     // manage group that has no region
-    current_header_ = convertHeaderToNum(header);
-    if (current_header_ != kRegion) {
+    header_ = convertHeaderToEnum(header);
+    if (header_ != kRegion) {
         if (regions_in_group_ == 0) {
             if (region_.is_valid) {
                 regions_.push_back(buildRegion(group_));
@@ -452,14 +467,14 @@ void SFZSink::header(const String& header) {
     }
 
     // start header
-    if (current_header_ == kGlobal) {
+    if (header_ == kGlobal) {
         region_ = global_;
         regions_in_group_ = -1;
-    } else if (current_header_ == kGroup) {
+    } else if (header_ == kGroup) {
         region_ = group_;
-        region_.group_id = ++current_group_;
+        region_.group_id = ++group_id_;
         regions_in_group_ = 0;
-    } else if (current_header_ == kRegion) {
+    } else if (header_ == kRegion) {
         region_ = group_;
         if (regions_in_group_ >= 0) {
             regions_in_group_++;
@@ -469,29 +484,57 @@ void SFZSink::header(const String& header) {
     }
 }
 
+void SFZSink::endHeader(const String& header) {
+    trace_printf("[%s::%s] (\"%s\")\n", kClassName, __func__, header.c_str());
+
+    // end header
+    if (header_ == kGlobal) {
+        global_ = region_;
+    } else if (header_ == kGroup) {
+        group_ = region_;
+    } else if (header_ == kRegion) {
+        if (region_.is_valid) {
+            regions_.push_back(buildRegion(region_));
+        }
+    }
+
+    header_ = kInvalidHeader;
+}
+
 void SFZSink::opcode(const String& opcode, const String& value) {
-    trace_printf("SFZSink::opcode('%s', '%s')\n", opcode.c_str(), value.c_str());
+    trace_printf("[%s::%s] (\"%s\", \"%s\")\n", kClassName, __func__, opcode.c_str(), value.c_str());
     // clang-format off
     const  OpcodeSpec opcode_spec[] = {
-    //   opcode_str    opcode_enum       min              max              parser
-        {"sample",     kOpcodeSample,    0,               0,               nullptr      },
-        {"hikey",      kOpcodeHikey,     NOTE_NUMBER_MIN, NOTE_NUMBER_MAX, parseNotename},
-        {"lokey",      kOpcodeLokey,     NOTE_NUMBER_MIN, NOTE_NUMBER_MAX, parseNotename},
-        {"key",        kOpcodeHikey,     NOTE_NUMBER_MIN, NOTE_NUMBER_MAX, parseNotename},
-        {"key",        kOpcodeLokey,     NOTE_NUMBER_MIN, NOTE_NUMBER_MAX, parseNotename},
-        {"offset",     kOpcodeOffset,    0,               UINT32_MAX,      parseUint32  },
-        {"end",        kOpcodeEnd,       0,               UINT32_MAX,      parseUint32  },
-        {"count",      kOpcodeCount,     0,               UINT32_MAX,      parseUint32  },
-        {"loop_mode",  kOpcodeLoopMode,  kNoLoop,         kLoopSustain,    parseLoopmode},
-        {"loop_start", kOpcodeLoopStart, 0,               UINT32_MAX,      parseUint32  },
-        {"loop_end",   kOpcodeLoopEnd,   0,               UINT32_MAX,      parseUint32  },
-        {"loopmode",   kOpcodeLoopMode,  kNoLoop,         kLoopSustain,    parseLoopmode},
-        {"loopstart",  kOpcodeLoopStart, 0,               UINT32_MAX,      parseUint32  },
-        {"loopend",    kOpcodeLoopEnd,   0,               UINT32_MAX,      parseUint32  },
-        {"sw_last",    kOpcodeSwLast,    NOTE_NUMBER_MIN, NOTE_NUMBER_MAX, parseNotename},
-        {"sw_lokey",   kOpcodeSwLokey,   NOTE_NUMBER_MIN, NOTE_NUMBER_MAX, parseNotename},
-        {"sw_hikey",   kOpcodeSwHikey,   NOTE_NUMBER_MIN, NOTE_NUMBER_MAX, parseNotename},
-        {"sw_default", kOpcodeSwDefault, NOTE_NUMBER_MIN, NOTE_NUMBER_MAX, parseNotename}
+    //   opcode_str      opcode_enum         min              max              parser
+        {"sample",       kOpcodeSample,      0,               0,               nullptr      },
+        {"lochan",       kOpcodeLochan,      0,               15,              parseUint32  },
+        {"hichan",       kOpcodeHichan,      0,               15,              parseUint32  },
+        {"hikey",        kOpcodeHikey,       NOTE_NUMBER_MIN, NOTE_NUMBER_MAX, parseNotename},
+        {"lokey",        kOpcodeLokey,       NOTE_NUMBER_MIN, NOTE_NUMBER_MAX, parseNotename},
+        {"key",          kOpcodeHikey,       NOTE_NUMBER_MIN, NOTE_NUMBER_MAX, parseNotename},
+        {"key",          kOpcodeLokey,       NOTE_NUMBER_MIN, NOTE_NUMBER_MAX, parseNotename},
+        {"lovel",        kOpcodeLovel,       0,               127,             parseUint32  },
+        {"hivel",        kOpcodeHivel,       0,               127,             parseUint32  },
+        {"lorand",       kOpcodeLorand,      0x00000000,      0x80000000,      parseUint32  }, //< not supported
+        {"hirand",       kOpcodeHirand,      0x00000000,      0x80000000,      parseUint32  }, //< not supported
+        {"seq_length",   kOpcodeSeqLength,   1,               100,             parseUint32  }, //< not supported
+        {"seq_position", kOpcodeSeqPosition, 1,               100,             parseUint32  }, //< not supported
+        {"group",        kOpcodeGroup,       0,               UINT32_MAX,      parseUint32  }, //< not supported
+        {"off_by",       kOpcodeOffBy,       0,               UINT32_MAX,      parseUint32  }, //< not supported
+        {"offset",       kOpcodeOffset,      0,               UINT32_MAX,      parseUint32  },
+        {"end",          kOpcodeEnd,         0,               UINT32_MAX,      parseUint32  },
+        {"count",        kOpcodeCount,       0,               UINT32_MAX,      parseUint32  },
+        {"loop_mode",    kOpcodeLoopMode,    kNoLoop,         kLoopSustain,    parseLoopmode},
+        {"loop_start",   kOpcodeLoopStart,   0,               UINT32_MAX,      parseUint32  },
+        {"loop_end",     kOpcodeLoopEnd,     0,               UINT32_MAX,      parseUint32  },
+        {"loopmode",     kOpcodeLoopMode,    kNoLoop,         kLoopSustain,    parseLoopmode},
+        {"loopstart",    kOpcodeLoopStart,   0,               UINT32_MAX,      parseUint32  },
+        {"loopend",      kOpcodeLoopEnd,     0,               UINT32_MAX,      parseUint32  },
+        {"sw_last",      kOpcodeSwLast,      NOTE_NUMBER_MIN, NOTE_NUMBER_MAX, parseNotename},
+        {"sw_lokey",     kOpcodeSwLokey,     NOTE_NUMBER_MIN, NOTE_NUMBER_MAX, parseNotename},
+        {"sw_hikey",     kOpcodeSwHikey,     NOTE_NUMBER_MIN, NOTE_NUMBER_MAX, parseNotename},
+        {"default_path", kOpcodeDefaultPath, 0,               0,               nullptr      },
+        {"sw_default",   kOpcodeSwDefault,   NOTE_NUMBER_MIN, NOTE_NUMBER_MAX, parseNotename}
     };
     // clang-format on
 
@@ -503,13 +546,17 @@ void SFZSink::opcode(const String& opcode, const String& value) {
         }
 
         if (spec->opcode_enum == kOpcodeSample) {
-            region_.sample = normalizePath(sfz_folder_path_ + value);
-            SDClass sdcard;
-            if (sdcard.begin()) {
-                if (!sdcard.exists(region_.sample)) {
-                    error_printf("SFZSink: no such file '%s'\n", region_.sample.c_str());
-                    region_.is_valid = false;
-                }
+            String sfz_dir = getFolderPath(sfz_path_);
+            String sample_prefix = joinPath(sfz_dir, default_path_);
+            String sample_path = sample_prefix + value;
+            region_.sample = normalizePath(sample_path);
+            if (!Storage.exists(region_.sample)) {
+                error_printf("[%s::%s] no such file \"%s\"\n", kClassName, __func__, region_.sample.c_str());
+                region_.is_valid = false;
+            }
+        } else if (spec->opcode_enum == kOpcodeDefaultPath) {
+            if (header_ == kControl) {
+                default_path_ = value;
             }
         } else {
             if (spec->opcode_enum == kOpcodeEnd && value == "-1") {
@@ -518,12 +565,12 @@ void SFZSink::opcode(const String& opcode, const String& value) {
             }
             uint32_t int_value = 0;
             if (!spec->parser(value, &int_value)) {
-                error_printf("SFZSink: parse error '%s=%s'\n", opcode.c_str(), value.c_str());
+                error_printf("[%s::%s] parse error '%s=%s'\n", kClassName, __func__, opcode.c_str(), value.c_str());
                 region_.is_valid = false;
                 continue;
             }
             if (int_value < spec->min || spec->max < int_value) {
-                error_printf("SFZSink: out of range '%s=%s'\n", opcode.c_str(), value.c_str());
+                error_printf("[%s::%s] out of range '%s=%s'\n", kClassName, __func__, opcode.c_str(), value.c_str());
                 region_.is_valid = false;
                 continue;
             }
@@ -540,78 +587,98 @@ void SFZSink::opcode(const String& opcode, const String& value) {
     }
 }
 
-void SFZSink::startSound() {
-    trace_printf("enter: %s()\n", __func__);
-
-    if (playing_region_ == nullptr) {
-        error_printf("SFZ data not found.\n");
-        return;
+SFZSink::PlaybackUnit* SFZSink::startPlayback(uint8_t note, uint8_t velocity, uint8_t channel, Region* region) {
+    trace_printf("[%s::%s] (%d,%d,%d,%p))\n", kClassName, __func__, note, velocity, channel, region);
+    PlaybackUnit* unit = nullptr;
+    if (region == nullptr) {
+        error_printf("[%s::%s] error: region is null\n", kClassName, __func__);
+        return unit;
     }
-
-    SDClass sdcard;
-    if (!sdcard.begin()) {
-        error_printf("error: cannot access sdcard\n");
-        return;
+    for (auto& e : playback_units_) {
+        if (e.render_ch == kDeallocatedChannel) {
+            unit = &e;
+            break;
+        }
     }
-    if (file_) {
-        file_.close();
+    if (unit == nullptr) {
+        playback_units_.push_back(PlaybackUnit());
+        PlaybackUnit& e = playback_units_.back();
+        unit = &e;
+        unit->render_ch = kDeallocatedChannel;
     }
-    file_ = sdcard.open(playing_region_->sample.c_str());
-    if (!file_) {
-        error_printf("error: file open error(%s)\n", playing_region_->sample.c_str());
-        stopSound();
-        return;
+    unit->file = File(region->sample.c_str());
+    if (unit->file) {
+        unit->file.seek(region->offset);
+        unit->note = note;
+        unit->channel = channel;
+        int render_channel = renderer_.allocateChannel();
+        unit->render_ch = (render_channel < 0) ? kUnallocatedChannel : render_channel;
+        unit->region = region;
+        unit->loop = 0;
+
+        if (unit->render_ch == kUnallocatedChannel) {
+            error_printf("[%s::%s] cannot allocate channel\n", kClassName, __func__);
+        } else {
+            continuePlayback(unit, kPreloadFrames);
+        }
+    } else {
+        error_printf("[%s::%s] error: file open error \"%s\"\n", kClassName, __func__, region->sample.c_str());
     }
-    file_.seek(playing_region_->offset);
-
-    loop_count_ = 0;
-
-    renderer_.clear(0);
-    renderer_.setState(PcmRenderer::kStateActive);
-    loadSound(kPreLoadFrameNum);
+    return unit;
 }
 
-void SFZSink::loadSound(int frame) {
-    trace_printf("enter: %s()\n", __func__);
-    for (int i = 0; i < frame; i++) {
-        if (renderer_.getState() != PcmRenderer::kStateActive) {
-            break;
-        }
-        if (playing_region_ == nullptr) {
-            break;
-        }
-
+void SFZSink::continuePlayback(PlaybackUnit* unit, int frames) {
+    if (unit == nullptr) {
+        return;
+    }
+    if (unit->render_ch < 0) {
+        return;
+    }
+    for (int i = 0; i < frames; i++) {
         // end of pcm
-        if (playing_region_->loop_mode == kNoLoop) {
-            if (file_.position() >= playing_region_->end) {
-                debug_printf("SFZSink: no_loop end\n");
-                stopSound();
+        if (unit->region->loop_mode == kNoLoop) {
+            if (unit->file.position() >= unit->region->end) {
+                debug_printf("[%s::%s] no_loop end\n", kClassName, __func__);
+                stopPlayback(unit);
                 break;
             }
         } else {
-            if (file_.position() >= playing_region_->loop_end) {
-                file_.seek(playing_region_->loop_start);
-                loop_count_++;
+            if (unit->file.position() >= unit->region->loop_end) {
+                unit->loop++;
+                unit->file.seek(unit->region->loop_start);
             }
         }
 
         // one_shot
-        if (playing_region_->loop_mode == kOneShot) {
-            if (loop_count_ >= playing_region_->count) {
-                debug_printf("SFZSink: one_shot end\n");
-                stopSound();
+        if (unit->region->loop_mode == kOneShot) {
+            if (unit->loop >= unit->region->count) {
+                debug_printf("[%s::%s] one_shot end\n", kClassName, __func__);
+                stopPlayback(unit);
                 break;
             }
         }
 
-        writeToRenderer(renderer_, 0, file_, playing_region_->loop_end);
+        // output PCM
+        if (renderer_.getWritableSize(unit->render_ch) < kPbBlockSize) {
+            break;
+        }
+        trace_printf("[%s::%s] %d %d,%d\n", kClassName, __func__, unit->render_ch, (int)renderer_.getReadableSize(unit->render_ch),
+                     (int)renderer_.getWritableSize(unit->render_ch));
+        size_t read_size = unit->region->loop_end - unit->file.position();
+        read_size = (read_size < kPbBlockSize) ? read_size : kPbBlockSize;
+        uint8_t buffer[read_size];
+        unit->file.read(buffer, read_size);
+        renderer_.write(unit->render_ch, buffer, read_size);
     }
 }
 
-void SFZSink::stopSound() {
-    trace_printf("enter: %s()\n", __func__);
-    renderer_.setState(PcmRenderer::kStatePause);
-    playing_region_ = nullptr;
+void SFZSink::stopPlayback(PlaybackUnit* unit) {
+    if (unit == nullptr) {
+        return;
+    }
+    renderer_.deallocateChannel(unit->render_ch);
+    unit->render_ch = kDeallocatedChannel;
+    unit->file.close();
 }
 
 #endif  // ARDUINO_ARCH_SPRESENSE

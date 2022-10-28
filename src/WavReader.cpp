@@ -23,6 +23,8 @@
 #define error_printf printf
 #endif  // DEBUG
 
+static const char kClassName[] = "WavReader";
+
 const int kSampleFrq = 48000;
 const int kBitDepth = 16;
 const int kChannelCount = 2;
@@ -77,10 +79,10 @@ bool WavReader::isWaveFile() {
 
 bool WavReader::load(File& file) {
     if (!file) {
-        error_printf("WavReader: %s invalid\n", file.name());
+        error_printf("[%s::%s] error: %s invalid\n", kClassName, __func__, file.name());
         return false;
     }
-    trace_printf("WavReader: %s valid\n", file.name());
+    trace_printf("[%s::%s] %s valid\n", kClassName, __func__, file.name());
 
     if (!parseHeader(file)) {
         pos_ = 0;
@@ -96,7 +98,7 @@ bool WavReader::load(File& file) {
             riff_chunk[i] = file.read();
         }
         riff_chunk[kWaveChunkSize] = '\0';
-        trace_printf("WavReader: chunk:%s\n", riff_chunk);
+        trace_printf("[%s::%s] chunk:%s\n", kClassName, __func__, riff_chunk);
         data_len = getByte32LE(file);
         if (strncmp(riff_chunk, "data", kWaveChunkSize) == 0) {
             pos_ = file.position();
@@ -109,7 +111,7 @@ bool WavReader::load(File& file) {
         }
     }
 
-    trace_printf("music_start(data Length:%d)\n", size_);
+    trace_printf("[%s::%s] music_start(data Length:%d)\n", kClassName, __func__, size_);
     if (size_ == 0) {
         return false;
     }
@@ -119,21 +121,21 @@ bool WavReader::load(File& file) {
 
 bool WavReader::parseHeader(File& file) {
     RIFFHeader riffh = RIFFHeader();
-    debug_printf("WavReader: %s parse start.\n", file.name());
+    debug_printf("[%s::%s] %s parse start.\n", kClassName, __func__, file.name());
 
     if (!parseRIFFHeader(file, &riffh)) {
-        debug_printf("WavReader: %s is not WAVE.\n", file.name());
+        debug_printf("[%s::%s] %s is not WAVE.\n", kClassName, __func__, file.name());
         return false;
     }
     if (strncmp(riffh.riff_format, "WAVE", sizeof(riffh.riff_format)) != 0) {
-        debug_printf("WavReader: %s is not WAVE Format File.\n", file.name());
+        debug_printf("[%s::%s] %s is not WAVE Format File.\n", kClassName, __func__, file.name());
         return false;
     }
 
-    trace_printf("WavReader: this file is WAVE Format File.\n");
+    trace_printf("[%s::%s] this file is WAVE Format File.\n", kClassName, __func__);
 
     if (!parseWaveHeader(file, &wave_header_)) {
-        debug_printf("WavReader: %s is not supported.\n", file.name());
+        debug_printf("[%s::%s] %s is not supported.\n", kClassName, __func__, file.name());
         return false;
     }
 
@@ -155,9 +157,9 @@ bool WavReader::parseRIFFHeader(File& file, RIFFHeader* riffh) {
         return false;
     }
 
-    trace_printf("WavReader: this file is RIFF Format File.\n");
+    trace_printf("[%s::%s] this file is RIFF Format File.\n", kClassName, __func__);
     riffh->data_len = getByte32LE(file);
-    trace_printf("WavReader: file len = %d\n", riffh->data_len);
+    trace_printf("[%s::%s] file len = %d\n", kClassName, __func__, riffh->data_len);
 
     for (unsigned int i = 0; i < sizeof(riffh->riff_format); i++) {
         riffh->riff_format[i] = file.read();
@@ -166,7 +168,7 @@ bool WavReader::parseRIFFHeader(File& file, RIFFHeader* riffh) {
 }
 
 bool WavReader::parseWaveHeader(File& file, WaveHeader* waveh) {
-    trace_printf("WavReader: Sub chunk prase\n");
+    trace_printf("[%s::%s] Sub chunk prase\n", kClassName, __func__);
     while (true) {
         char wave_chunk[kWaveChunkSize + 1];
         for (unsigned int i = 0; i < kWaveChunkSize; i++) {
@@ -187,25 +189,25 @@ bool WavReader::parseWaveHeader(File& file, WaveHeader* waveh) {
     }
 
     waveh->data_len = getByte32LE(file);
-    trace_printf("WavReader:   Sub chunk len    = %d\n", waveh->data_len);
+    trace_printf("[%s::%s]   Sub chunk len    = %d\n", kClassName, __func__, waveh->data_len);
 
     waveh->format = getByte16LE(file);
-    trace_printf("WavReader:   Format           = %d\n", waveh->format);
+    trace_printf("[%s::%s]   Format           = %d\n", kClassName, __func__, waveh->format);
 
     waveh->ch = getByte16LE(file);
-    debug_printf("WavReader: @ Channel          = %d\n", waveh->ch);
+    debug_printf("[%s::%s] @ Channel          = %d\n", kClassName, __func__, waveh->ch);
 
     waveh->samples_per_sec = getByte32LE(file);
-    debug_printf("WavReader: @ Samples per sec  = %d\n", waveh->samples_per_sec);
+    debug_printf("[%s::%s] @ Samples per sec  = %d\n", kClassName, __func__, waveh->samples_per_sec);
 
     waveh->avg_byte_per_sec = getByte32LE(file);
-    trace_printf("WavReader:   Avg byte per sec = %d\n", waveh->avg_byte_per_sec);
+    trace_printf("[%s::%s]   Avg byte per sec = %d\n", kClassName, __func__, waveh->avg_byte_per_sec);
 
     waveh->block_align = getByte16LE(file);
-    trace_printf("WavReader:   Block align      = %d\n", waveh->block_align);
+    trace_printf("[%s::%s]   Block align      = %d\n", kClassName, __func__, waveh->block_align);
 
     waveh->bits_per_sample = getByte16LE(file);
-    debug_printf("WavReader: @ Bits per sample  = %d\n\n", waveh->bits_per_sample);
+    debug_printf("[%s::%s] @ Bits per sample  = %d\n\n", kClassName, __func__, waveh->bits_per_sample);
 
     //サブチャンクのその他のデータは必要ないため排除
     if (16 < waveh->data_len) {
