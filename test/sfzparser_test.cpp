@@ -33,8 +33,10 @@ public:
     }
     void endSfz() override {
     }
-    void header(const String &header) override {
+    void startHeader(const String &header) override {
         headers.push_back(header);
+    }
+    void endHeader(const String &header) override {
     }
     void opcode(const String &opcode, const String &value) override {
         opcodes.push_back(opcode);

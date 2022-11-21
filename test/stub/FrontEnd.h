@@ -36,6 +36,19 @@ union AsDataDest {
     FrontendDoneCallback cb;
 };
 
+struct AsInitMicFrontendParam {
+    uint8_t channel_number;
+    uint8_t bit_length;
+    uint16_t samples_per_frame;
+    uint32_t out_fs;
+    uint8_t preproc_type;
+    char dsp_path[32];
+    uint8_t data_path;
+    AsDataDest dest;
+};
+
+bool AS_InitMicFrontend(AsInitMicFrontendParam* initparam);
+
 class FrontEnd {
 public:
     err_t begin(void);

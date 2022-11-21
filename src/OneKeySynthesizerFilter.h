@@ -7,10 +7,12 @@
 #ifndef ONE_KEY_SYNTHESIZER_FILTER_H_
 #define ONE_KEY_SYNTHESIZER_FILTER_H_
 
+#include "ParserFactory.h"
+#include "ScoreFilter.h"
 #include "ScoreParser.h"
 #include "YuruInstrumentFilter.h"
 
-class OneKeySynthesizerFilter : public BaseFilter {
+class OneKeySynthesizerFilter : public ScoreFilter {
 public:
     OneKeySynthesizerFilter(const String& file_name, Filter& filter);
 
@@ -26,12 +28,7 @@ public:
     ~OneKeySynthesizerFilter();
 
 private:
-    ScoreParser* parser_;
-
-    String directory_name_;
     ScoreParser::MidiMessage registered_midi_msg_;
-
-    int score_num_;  //< 選択中の楽譜
 
     bool is_note_registered_;  //< ノート登録状態
     bool is_note_playing_;     //< ノート再生状態
@@ -40,15 +37,7 @@ private:
 
     void registerNote();
 
-    // others getter setter
-    void setScore(int score_id);
-    int getScoreNum();
-
-    bool readDirectoryScores(const String& dir_name);
-
-    bool readScore(File& file);
-
-    void selectScore(int id);
+    bool selectScore(int id);
 };
 
 #endif  // ONE_KEY_SYNTHESIZER_FILTER_H_

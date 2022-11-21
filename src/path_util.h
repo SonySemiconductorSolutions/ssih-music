@@ -19,4 +19,6 @@ bool isHidden(const String& path);
 
 String normalizePath(const String& path);
 
+String joinPath(const String& dir, const String& path);
+
 #endif  // PATH_UTIL_H_

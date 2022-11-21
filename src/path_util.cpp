@@ -8,6 +8,12 @@
 
 #include <Arduino.h>
 
+/**
+ * @brief Get the Folder Path object
+ *
+ * @param path "/path/to.file"
+ * @return String "/path/"
+ */
 String getFolderPath(const String& path) {
     int sep1 = path.lastIndexOf("/");
     int sep2 = path.lastIndexOf("\\");
@@ -19,6 +25,12 @@ String getFolderPath(const String& path) {
     }
 }
 
+/**
+ * @brief Get the Base Name object
+ *
+ * @param path "/path/to.file"
+ * @return String "to.file"
+ */
 String getBaseName(const String& path) {
     int sep1 = path.lastIndexOf("/");
     int sep2 = path.lastIndexOf("\\");
@@ -30,6 +42,12 @@ String getBaseName(const String& path) {
     }
 }
 
+/**
+ * @brief Get the Extension object
+ *
+ * @param path "/path/to.file"
+ * @return String ".file"
+ */
 String getExtension(const String& path) {
     String basename = getBaseName(path);
     int sep = path.lastIndexOf(".");
@@ -68,4 +86,27 @@ String normalizePath(const String& path) {
     }
 
     return output_path;
+}
+
+// joinPath("/path/to.dir", "file") => "/path/to.dir/file"
+// joinPath("/path/to.dir", "/path/to.file") => "/path/to.file"
+// joinPath("", "path/to.file") => "path/to.file"
+// joinPath("/path/to.dir", "") => "/path/to.dir/"
+String joinPath(const String& dir, const String& path) {
+    if (dir.length() == 0) {
+        return path;
+    }
+    if (path.length() == 0) {
+        return dir;
+    }
+    if (path[0] == '/' || path[0] == '\\') {
+        return path;
+    }
+    char last_ch = dir[dir.length() - 1];
+    String joined_path = dir;
+    if (last_ch != '/' && last_ch != '\\') {
+        joined_path += "/";
+    }
+    joined_path += path;
+    return joined_path;
 }

@@ -31,6 +31,8 @@
 #define error_printf printf
 #endif  // if defined(DEBUG)
 
+static const char kClassName[] = "SFZParser";
+
 static String replaceString(const String& str, std::vector<String>& names, std::vector<String>& values) {
     String ret = str;
     int pos = 0;
@@ -125,12 +127,15 @@ void SFZParser::parse(File sfz_file, const String& sfz_file_path, SFZHandler* ha
                 continue;
             }
         }
-        trace_printf("%s: state=%d ch=0x%02X(%c)\n", __func__, state, ch, (ch < 0 || ch == '\r' || ch == '\n') ? ' ' : ch);
+        trace_printf("[%s::%s] state=%d ch=0x%02X(%c)\n", kClassName, __func__, state, ch, (ch < 0 || ch == '\r' || ch == '\n') ? ' ' : ch);
         if (state == kReady) {
             if (ch == '#') {
                 macro = "";
                 state = kExpectMacro;
             } else if (ch == '<') {
+                if (header_name != "") {
+                    handler->endHeader(header_name);
+                }
                 header_name = "";
                 state = kExpectHeaderName;
             } else if (isGraphX(ch)) {
@@ -176,17 +181,14 @@ void SFZParser::parse(File sfz_file, const String& sfz_file_path, SFZHandler* ha
             }
         } else if (state == kIncludePath) {
             if (ch == '"') {
-                SDClass sdcard;
-                if (sdcard.begin()) {
-                    String path = getFolderPath(sfz_file_path) + include_path;
-                    File include_file = sdcard.open(path.c_str());
-                    if (include_file) {
-                        debug_printf("parsing '%s'\n", path.c_str());
-                        parse(include_file, sfz_file_path, handler);
-                        include_file.close();
-                    } else {
-                        error_printf("error: cannot open '%s'\n", path.c_str());
-                    }
+                String path = getFolderPath(sfz_file_path) + include_path;
+                File include_file = File(path.c_str());
+                if (include_file) {
+                    debug_printf("[%s::%s] parsing '%s'\n", kClassName, __func__, path.c_str());
+                    parse(include_file, sfz_file_path, handler);
+                    include_file.close();
+                } else {
+                    error_printf("[%s::%s] error: cannot open '%s'\n", kClassName, __func__, path.c_str());
                 }
                 skip_line = true;
                 state = kReady;
@@ -252,7 +254,7 @@ void SFZParser::parse(File sfz_file, const String& sfz_file_path, SFZHandler* ha
             }
         } else if (state == kHeaderName) {
             if (ch == '>') {
-                handler->header(header_name);
+                handler->startHeader(header_name);
                 state = kReady;
             } else if (ch == '<') {
                 header_name = "";
@@ -304,6 +306,9 @@ void SFZParser::parse(File sfz_file, const String& sfz_file_path, SFZHandler* ha
                 String o = replaceString(opcode, define_names_, define_values_);
                 String v = replaceString(value, define_names_, define_values_);
                 handler->opcode(o, v);
+                if (header_name != "") {
+                    handler->endHeader(header_name);
+                }
                 header_name = "";
                 state = kExpectHeaderName;
             } else if (ch < 0 || ch == '\r' || ch == '\n') {
@@ -328,6 +333,9 @@ void SFZParser::parse(File sfz_file, const String& sfz_file_path, SFZHandler* ha
         }
     }
 
+    if (header_name != "") {
+        handler->endHeader(header_name);
+    }
     parsing_root_ = stash;
     if (parsing_root_) {
         handler->endSfz();

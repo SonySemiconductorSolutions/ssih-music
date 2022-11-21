@@ -48,6 +48,8 @@ void setup() {
     Serial.println("Ready to play Castanet");
 }
 
+int playing_note = INVALID_NOTE_NUMBER;
+
 void loop() {
     unsigned long now = millis();
     if (next == 0) {
@@ -84,7 +86,11 @@ void loop() {
             note = 73;
         }
         if (note != INVALID_NOTE_NUMBER) {
+            if (playing_note != INVALID_NOTE_NUMBER) {
+                inst.sendNoteOff(playing_note, DEFAULT_VELOCITY, DEFAULT_CHANNEL);
+            }
             inst.sendNoteOn(note, DEFAULT_VELOCITY, DEFAULT_CHANNEL);
+            playing_note = note;
         }
         next += INTERVAL;
     }

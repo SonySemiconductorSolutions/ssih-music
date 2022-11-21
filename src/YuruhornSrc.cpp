@@ -27,6 +27,8 @@
 #define error_printf printf
 #endif  // DEBUG
 
+static const char kClassName[] = "VoiceCapture";
+
 #define UP_THRSH_PERCENT (80)      //< 80%
 #define DOWN_THRSH_PERCENT (20)    //< 20%
 #define NORMAL_THRSH_PERCENT (50)  //< 50%
@@ -193,7 +195,7 @@ uint8_t YuruhornSrc::getNote(uint32_t freq, uint8_t prev) {
     }
 
     int prev_idx = note2index(prev);
-    debug_printf("prev = %d, prev_index = %d, input_Freq = %d", prev, prev_idx, freq);
+    debug_printf("[%s::%s] prev = %d, prev_index = %d, input_Freq = %d,", kClassName, __func__, prev, prev_idx, freq);
 
     size_t i = 1;
     for (i = 1; i < freq2note_.size(); i++) {
@@ -211,7 +213,7 @@ uint8_t YuruhornSrc::getNote(uint32_t freq, uint8_t prev) {
         }
     }
     note = freq2note_[i - 1].note;
-    debug_printf(", thresh=%d", thresh);
+    debug_printf(" thresh=%d,", thresh);
     if (note <= freq2note_[0].note || freq2note_[freq2note_.size() - 1].note <= note) {
         // first and last elements are invalid
         note = INVALID_NOTE_NUMBER;
@@ -220,7 +222,7 @@ uint8_t YuruhornSrc::getNote(uint32_t freq, uint8_t prev) {
     history_.update(note);
     note = history_.lookup(note);
 
-    debug_printf(", return note_num = %d\n", note);
+    debug_printf(" return note_num = %d\n", note);
     return note;
 }
 
@@ -361,7 +363,7 @@ void YuruhornSrc::onCapture(unsigned int freq_numer, unsigned int freq_denom, un
     input_level_ = volume;
     ledOn(LED2);
 
-    trace_printf("freq:%d, volume:%d\n", freq_numer * 10 / freq_denom, volume);
+    trace_printf("[%s::%s] freq:%d, volume:%d\n", kClassName, __func__, freq_numer * 10 / freq_denom, volume);
     note = getNote(freq_numer * 10 / freq_denom, prev_note_);
     note = decideNote(note, volume);
     if (monitor_enabled_) {

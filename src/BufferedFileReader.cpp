@@ -26,6 +26,8 @@
 #define error_printf printf
 #endif  // DEBUG
 
+static const char kClassName[] = "BufferedFileReader";
+
 const int kBufLen = 10 * 1024;
 BufferedFileReader::BufferedFileReader(File& file) : BufferedFileReader(file, kBufLen) {
 }
@@ -33,7 +35,7 @@ BufferedFileReader::BufferedFileReader(File& file) : BufferedFileReader(file, kB
 BufferedFileReader::BufferedFileReader(File& file, size_t buf_size) : position_(0), capacity_(buf_size), offset_(0), size_(0), file_() {
     buf_ = new uint8_t[capacity_];
     if (file.isDirectory()) {
-        error_printf("BufferedFileReader Error:this file is directory.\n");
+        error_printf("[%s::%s] BufferedFileReader Error:this file is directory.\n", kClassName, __func__);
         return;
     }
     memset(buf_, 0x00, capacity_);
@@ -89,7 +91,8 @@ int BufferedFileReader::read(void* dst, size_t request_size) {
     size_t read_size = 0;
 
     while (0 < remain_size) {
-        trace_printf("size_:%u, offset_:%u, remain_size:%u\n", (unsigned int)size_, (unsigned int)offset_, (unsigned int)remain_size);
+        trace_printf("[%s::%s] size_:%u, offset_:%u, remain_size:%u\n", kClassName, __func__, (unsigned int)size_, (unsigned int)offset_,
+                     (unsigned int)remain_size);
         if (size_ <= offset_ + remain_size) {
             //バッファ内に残っているデータすべてをコピー
             size_t readable_size = size_ - offset_;
@@ -99,7 +102,7 @@ int BufferedFileReader::read(void* dst, size_t request_size) {
             remain_size -= readable_size;
             //新たにデータをキャッシュする
             size_ = (file_.available() < (int)capacity_) ? file_.available() : (int)capacity_;
-            trace_printf("capacity_:%u, file_.available():%u\n", (unsigned int)capacity_, (unsigned int)file_.available());
+            trace_printf("[%s::%s] capacity_:%u, file_.available():%u\n", kClassName, __func__, (unsigned int)capacity_, (unsigned int)file_.available());
             if (size_ > 0) {
                 position_ = file_.position();
                 int ret = file_.read(buf_, size_);

@@ -1135,6 +1135,14 @@ void File::rewindDirectory(void) {
 
 //// FrontEnd.h
 
+bool AS_ReceiveObjectReply(MsgQueId msgq_id, AudioObjReply *reply) {
+    return true;
+}
+
+bool AS_InitMicFrontend(AsInitMicFrontendParam *initparam) {
+    return true;
+}
+
 err_t FrontEnd::begin(void) {
     return FRONTEND_ECODE_OK;
 }
@@ -1508,3 +1516,5 @@ boolean StorageClass::rmdir(const char *filepath) {
 boolean StorageClass::rmdir(const String &filepath) {
     return rmdir(filepath.c_str());
 }
+
+StorageClass Storage;

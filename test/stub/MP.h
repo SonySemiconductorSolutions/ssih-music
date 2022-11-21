@@ -11,6 +11,8 @@
 
 #define MP_RECV_POLLING (0xFFFFFFFF)
 
+#define CONFIG_CXD56_CPUFIFO_NBUFFERS (8)
+
 class MPClass {
 public:
     MPClass(void);

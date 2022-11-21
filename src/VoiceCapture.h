@@ -93,6 +93,11 @@ private:
     int gain_;
     int input_level_;
     Result* result_;
+
+    size_t capture_frames_;
+    size_t send_frames_;
+    size_t receive_frames_;
+
     bool is_recording_;
     uint8_t* dump_buffer_;
     size_t wp_;

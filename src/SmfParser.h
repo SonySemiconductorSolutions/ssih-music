@@ -24,6 +24,7 @@ public:
         uint32_t start_byte;
         uint32_t data_length;
         bool is_conductor;
+        int note_count;
         String name;
     };
 
@@ -57,8 +58,6 @@ private:
 
     bool parseSMF();
     bool parseSMFTrack();
-
-    bool parseConductorTrack();
 
     bool parseMTrkEvent(ScoreParser::MidiMessage* midi_message);
 

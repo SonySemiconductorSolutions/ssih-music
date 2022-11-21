@@ -19,7 +19,8 @@ class SFZHandler {
 public:
     virtual void startSfz() = 0;
     virtual void endSfz() = 0;
-    virtual void header(const String& header) = 0;
+    virtual void startHeader(const String& header) = 0;
+    virtual void endHeader(const String& header) = 0;
     virtual void opcode(const String& opcode, const String& value) = 0;
 };
 
