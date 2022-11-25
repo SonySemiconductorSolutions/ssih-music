@@ -11,7 +11,8 @@
 #error "Core selection is wrong!!"
 #endif
 
-#include <BMI160Gen.h>
+#include "GyroSensor.h"
+
 #include <SFZSink.h>
 
 // sensor cycle
@@ -23,11 +24,7 @@ const int GYRO_RANGE = 250;
 
 // instrument
 SFZSink inst = SFZSink("FlamencoCastanet.sfz");
-
-// convert gyro sensor raw value to deg/sec
-int convertDegreePerSecond(int raw) {
-    return raw * GYRO_RANGE / 32768;
-}
+GyroSensor sensor(GYRO_RANGE);
 
 void setup() {
     // initialize Serial communication
@@ -36,12 +33,7 @@ void setup() {
         ;  // wait for the serial port to open
     }
 
-    // initialize gyro sensor
-    BMI160.begin(BMI160GenClass::I2C_MODE);
-    uint8_t dev_id = BMI160.getDeviceID();
-    Serial.print("DEVICE ID: ");
-    Serial.println(dev_id, HEX);
-    BMI160.setGyroRange(GYRO_RANGE);
+    sensor.begin();
 
     // initialize instrument
     inst.begin();
@@ -56,14 +48,8 @@ void loop() {
         next = now;
     }
     if (next <= now) {
-        int raw_x = 0, raw_y = 0, raw_z = 0;
-        BMI160.readGyro(raw_x, raw_y, raw_z);
-
         int x = 0, y = 0, z = 0;  // [deg/sec]
-        x = convertDegreePerSecond(raw_y);
-        y = convertDegreePerSecond(raw_x);
-        z = convertDegreePerSecond(raw_z);
-
+        sensor.get(&x, &y, &z);
         int x_thresh = 150, y_thresh = 150, z_thresh = 150;  // [deg/sec]
         int note = INVALID_NOTE_NUMBER;
         if (x >= x_thresh) {

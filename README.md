@@ -1,5 +1,11 @@
 # Sound Signal Processing Library for Spresense
 
+## Overview
+
+The Sound Signal Processing Library for Spresense (called ssprocLib) is a library for easy instrument development in [Spresense](https://developer.sony.com/develop/spresense/).
+
+See the [tutorial](/docs/Tutorial.en.md) for how to use this library.
+
 ## Version info
 
 | バージョン | リリース日  | 主な新機能と変更点                                               |
@@ -16,15 +22,19 @@
 |            |             | (機能追加) Spresense Reference Board開発環境に対応しました。     |
 |            |             | (機能追加) SFZ Formatのdefault_pathパラメータに対応しました。    |
 |            |             | (不具合修正) MIDIファイル再生で、音符や休符の再生時間が短くなる問題を修正しました。                                                             |
+| v0.10.0    | 2022-11-25  | (不具合修正) MIDIファイルを再生したときに、パート間で音ずれを起こす問題を修正しました。                                                         |
+|            |             | (サンプル) サンプルスケッチYuruFlaCastanetを新しい加速度センサBMI270に対応しました。                                                            |
+|            |             | (ツール) SFZ音源を本ライブラリで使用できるように変換する import-sfz.py を追加しました。                                                         |
+|            |             | (ドキュメント) 英語版チュートリアルを追加しました。                                                                                             |
 
 ## ライブラリ概要
 
-このライブラリは[Spresense](https://www.sony-semicon.co.jp/products/smart-sensing/spresense/)で簡単に楽器を開発するためのものです。
-電子楽器の演奏データを定めるMIDI規格をベースとしたAPIと、Spresenseのオーディオ入力・オーディオ出力を簡単に扱える機能ブロックを提供します。
+このライブラリは[Spresense](https://www.sony-semicon.co.jp/products/smart-sensing/spresense/)で簡単に楽器を開発するためのライブラリです。
+電子楽器の演奏データを定めるMIDI規格をベースとしたAPIと、Spresenseのオーディオ入力・オーディオ出力を簡単に扱えるソフトウェアモジュールを提供します。
 
 ## チュートリアル
 
-使い方は[チュートリアル](/docs/Tutorial.md)を参照してください。
+使い方は[チュートリアル](/docs/Tutorial.ja.md)を参照してください。
 
 ## ライセンス
 
