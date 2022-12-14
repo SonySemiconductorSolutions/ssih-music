@@ -34,6 +34,8 @@ private:
     unsigned long duration_;  //< txt:ノート再生時間, mid:デルタタイムの実時間
     unsigned long schedule_time_;
 
+    unsigned long total_delta_time_;
+
     // ----------------- playing status -----------------
     int play_state_;
     int default_state_;

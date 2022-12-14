@@ -37,6 +37,7 @@ ScoreSrc::ScoreSrc(const String& file_name, bool auto_start, Filter& filter)
       now_tempo_(kDefaultTempo),
       duration_(0),
       schedule_time_(0),
+      total_delta_time_(0),
       play_state_(auto_start ? ScoreSrc::PLAYING : ScoreSrc::PAUSE),
       default_state_(auto_start ? ScoreSrc::PLAYING : ScoreSrc::PAUSE),
       is_auto_playing_(auto_start),
@@ -122,15 +123,17 @@ void ScoreSrc::update() {
     }
     if (isScoreParserReady()) {
         if (!is_waiting_) {
+            unsigned long prev_total_delta_time = total_delta_time_;
             getMidiMessage(&midi_message_);
+            total_delta_time_ += midi_message_.delta_time;
             debug_printf("[%s::%s] delta_time:%d,", kClassName, __func__, midi_message_.delta_time);
             debug_printf(" status_byte:%02x, data_byte1:%02x, data_byte2:%02x,", midi_message_.status_byte, midi_message_.data_byte1, midi_message_.data_byte2);
             debug_printf(" event_code:%02x, event_length:%02x\n", midi_message_.event_code, midi_message_.event_length);
             uint16_t root_tick = getRootTick();
             if (root_tick != 0) {
-                duration_ = (unsigned long)(((now_tempo_ / root_tick) * midi_message_.delta_time) / 1000);
+                schedule_time_ += (unsigned long)(((now_tempo_ / root_tick) * total_delta_time_) / 1000) -
+                                  (unsigned long)(((now_tempo_ / root_tick) * prev_total_delta_time) / 1000);
             }
-            schedule_time_ += duration_;
             is_waiting_ = true;
         }
 
@@ -169,6 +172,8 @@ bool ScoreSrc::executeMetaEvent(const ScoreParser::MidiMessage& midi_message) {
         }
         now_tempo_ = data;
         debug_printf("[%s::%s] %d\n", kClassName, __func__, data);
+
+        total_delta_time_ = 0;
     } else if (midi_message.event_code == ScoreParser::kEndOfTrack) {  //楽譜終了
         play_state_ = ScoreFilter::END_SCORE;
     } else if (midi_message.event_code < 0x80) {

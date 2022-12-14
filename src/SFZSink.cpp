@@ -549,6 +549,7 @@ void SFZSink::opcode(const String& opcode, const String& value) {
             String sfz_dir = getFolderPath(sfz_path_);
             String sample_prefix = joinPath(sfz_dir, default_path_);
             String sample_path = sample_prefix + value;
+            sample_path.replace("\\", "/");
             region_.sample = normalizePath(sample_path);
             if (!Storage.exists(region_.sample)) {
                 error_printf("[%s::%s] no such file \"%s\"\n", kClassName, __func__, region_.sample.c_str());

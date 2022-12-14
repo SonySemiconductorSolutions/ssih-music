@@ -58,6 +58,7 @@ protected:
     int getNumberOfScores();
     void pauseAllNotes();
     void resumeAllNotes();
+    void stopAllNotes();
 
 private:
     ScoreParser* parser_;

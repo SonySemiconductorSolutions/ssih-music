@@ -193,6 +193,7 @@ bool ScoreFilter::setScoreIndex(int index) {
     root_tick_ = parser_->getRootTick();
     debug_printf("select title:%s\n", parser_->getTitle(index).c_str());
     debug_printf("[%s::%s] root_tick_:%d\n", kClassName, __func__, root_tick_);
+    ScoreFilter::stopAllNotes();
     return true;
 }
 
@@ -236,6 +237,14 @@ void ScoreFilter::resumeAllNotes() {
         if (e.stat == kNoteStatePause) {
             BaseFilter::sendNoteOn(e.note, e.velocity, e.channel);
             e.stat == kNoteStatePlaying;
+        }
+    }
+}
+void ScoreFilter::stopAllNotes() {
+    for (const auto& e : playing_notes_) {
+        if (e.stat == kNoteStatePlaying) {
+            BaseFilter::sendNoteOff(e.note, e.velocity, e.channel);
+            e.stat == kNoteStateEnd;
         }
     }
 }

@@ -9,15 +9,21 @@
 
 * [Spresense メインボード](https://developer.sony.com/ja/develop/spresense/specifications)
 * [Spresense 拡張ボード](https://developer.sony.com/ja/develop/spresense/specifications)
-* [SPRESENSE用3軸加速度・3軸ジャイロ・気圧・温度センサ アドオンボード BMP280 BMI160搭載](https://www.switch-science.com/catalog/5258/)
+* ジャイロセンサ (いずれかを入手して使用してください)
+    * BMI270
+        * [Sony Spresense 用 6軸 加速度計・ジャイロスコープセンサ (BMI270) Addon ボード](https://nextstep.official.ec/items/66165025)
+        * [Sony Spresense 9軸 加速度計・ジャイロ・コンパスセンサ (BMI270・AK09918) Addon ボード](https://nextstep.official.ec/items/66165488)
+    * BMI160 (文末の「ジャイロセンサにBMI160を使用する」を参考にしてください)
+        * [SPRESENSE用3軸加速度・3軸ジャイロ・気圧・温度センサ アドオンボード BMP280 BMI160搭載](https://www.switch-science.com/catalog/5258/)
 * microSDHCカード
 * スピーカー
 
 ## 構成ソフトウェア
 
-* Spresense Instrument Board
+* Spresense Reference Board
 * [Sound Signal Processing Library for Spresense](https://github.com/SonySemiconductorSolutions/ssih-music/)
-* [BMI160-Arduino](https://github.com/hanyazou/BMI160-Arduino)
+* [BMI270-Sensor-API](https://github.com/TomonobuHayakawa/BMI270-Sensor-API) (ジャイロセンサにBMI270を使用する場合に必要です)
+* [BMI160-Arduino](https://github.com/hanyazou/BMI160-Arduino) (ジャイロセンサにBMI160を使用する場合に必要です)
 
 ## 演奏方法
 
@@ -71,3 +77,12 @@
 ### 音源ファイルをSDカードにインストールする
 
 作成した `FlamencoCastanet.wav` と `FlamencoCastanet.sfz` をSDカードにコピーして、そのSDカードをSpresenseに挿入します。
+
+## ジャイロセンサにBMI160を使用する
+
+BMI270の代わりにBMI160を使用する場合は、 config.h を下記のように修正して、「マイコンボードに書き込む」を実行してください。
+
+```config.h
+#define GYRO_TYPE_BMI160
+// #define GYRO_TYPE_BMI270
+```
