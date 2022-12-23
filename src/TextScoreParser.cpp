@@ -13,7 +13,7 @@
 #include <File.h>
 #include <SDHCI.h>
 
-#include "BufferedFileReader.h"
+#include "midi_util.h"
 #include "YuruInstrumentFilter.h"
 
 // #define DEBUG (1)
@@ -65,7 +65,6 @@ TextScoreParser::TextScoreParser(const String& path)
     : ScoreParser(),
       musics_(),
       file_(path.c_str()),
-      reader_(file_),
       is_end_of_music_(true),
       tempo_(kDefaultTempo),
       tone_(0),
@@ -76,10 +75,10 @@ TextScoreParser::TextScoreParser(const String& path)
     int tempo = kDefaultTempo;
     int tone = 0;
     int rhythm = TextScoreParser::kRhythm4Note;
-    reader_.seek(0);
-    while (reader_.available()) {
-        size_t pos = reader_.position();
-        String line = reader_.readStringUntil('\n');
+    file_.seek(0);
+    while (file_.available()) {
+        size_t pos = file_.position();
+        String line = file_.readStringUntil('\n');
         line.trim();
         if (line.startsWith("#MUSIC_TITLE:")) {
             String value = line.substring(line.indexOf(":") + 1);
@@ -124,16 +123,16 @@ TextScoreParser::~TextScoreParser() {
     }
 }
 
-static void createSetTempo(ScoreParser::MidiMessage* msg, int tempo) {
+static void createSetTempo(ScoreParser::MidiMessage* msg, uint32_t delta_time, int tempo) {
     if (msg == nullptr) {
         error_printf("[%s::%s] error: internal error, msg is NULL\n", kClassName, __func__);
         return;
     }
     uint32_t usec = 60000000 / tempo;
-    msg->delta_time = 0;
-    msg->status_byte = ScoreParser::kMetaEvent;
-    msg->event_code = ScoreParser::kSetTempo;
-    msg->event_length = 3;
+    msg->delta_time = delta_time;
+    msg->status_byte = MIDI_MSG_META_EVENT;
+    msg->event_code = MIDI_META_SET_TEMPO;
+    msg->event_length = MIDI_METALEN_SET_TEMPO;
     msg->sysex_array[0] = (usec >> 16) & 0xFF;
     msg->sysex_array[1] = (usec >> 8) & 0xFF;
     msg->sysex_array[2] = (usec >> 0) & 0xFF;
@@ -141,15 +140,15 @@ static void createSetTempo(ScoreParser::MidiMessage* msg, int tempo) {
                  msg->sysex_array[0], msg->sysex_array[1], msg->sysex_array[2]);
 }
 
-static void createEndOfTrack(ScoreParser::MidiMessage* msg) {
+static void createEndOfTrack(ScoreParser::MidiMessage* msg, uint32_t delta_time) {
     if (msg == nullptr) {
         error_printf("[%s::%s] error: internal error, msg is NULL\n", kClassName, __func__);
         return;
     }
-    msg->delta_time = 0;
-    msg->status_byte = ScoreParser::kMetaEvent;
-    msg->event_code = ScoreParser::kEndOfTrack;
-    msg->event_length = 0;
+    msg->delta_time = delta_time;
+    msg->status_byte = MIDI_MSG_META_EVENT;
+    msg->event_code = MIDI_META_END_OF_TRACK;
+    msg->event_length = MIDI_METALEN_END_OF_TRACK;
     debug_printf("[%s::%s] -> %4d %02X %02X %02X\n", kClassName, __func__, msg->delta_time, msg->status_byte, msg->event_code, msg->event_length);
 }
 
@@ -159,7 +158,7 @@ static void createNoteOff(ScoreParser::MidiMessage* msg, uint32_t delta_time, ui
         return;
     }
     msg->delta_time = delta_time;
-    msg->status_byte = TextScoreParser::kNoteOff | DEFAULT_CHANNEL;
+    msg->status_byte = MIDI_MSG_NOTE_OFF;
     msg->data_byte1 = note & 0x7F;
     msg->data_byte2 = DEFAULT_VELOCITY;
     debug_printf("[%s::%s] -> %4d %02X %02X %02X\n", kClassName, __func__, msg->delta_time, msg->status_byte, msg->data_byte1, msg->data_byte2);
@@ -171,7 +170,7 @@ static void createNoteOn(ScoreParser::MidiMessage* msg, uint32_t delta_time, uin
         return;
     }
     msg->delta_time = delta_time;
-    msg->status_byte = TextScoreParser::kNoteOn | DEFAULT_CHANNEL;
+    msg->status_byte = MIDI_MSG_NOTE_ON;
     msg->data_byte1 = note & 0x7F;
     msg->data_byte2 = DEFAULT_VELOCITY;
     debug_printf("[%s::%s] -> %4d %02X %02X %02X\n", kClassName, __func__, msg->delta_time, msg->status_byte, msg->data_byte1, msg->data_byte2);
@@ -181,25 +180,26 @@ bool TextScoreParser::getMidiMessage(ScoreParser::MidiMessage* msg) {
     int ch = -1;
     String note_str = "";
     while (!is_end_of_music_) {
-        size_t pos = reader_.position();
-        if ((ch = reader_.read()) < 0) {
+        size_t pos = file_.position();
+        if ((ch = file_.read()) < 0) {
             if (note_ != INVALID_NOTE_NUMBER) {
                 createNoteOff(msg, duration_, note_);
-                reader_.seek(pos);
+                file_.seek(pos);
                 note_ = INVALID_NOTE_NUMBER;
                 duration_ = 0;
                 return true;
             } else {
-                createEndOfTrack(msg);
+                createEndOfTrack(msg, duration_);
+                duration_ = 0;
                 is_end_of_music_ = true;
                 return true;
             }
         }
         if (isWhitespace(ch)) {
         } else if (ch == '/') {
-            reader_.readStringUntil('\n');
+            file_.readStringUntil('\n');
         } else if (ch == '#') {
-            String line = reader_.readStringUntil('\n');
+            String line = file_.readStringUntil('\n');
             line.trim();
             debug_printf("[%s::%s] \"#%s\"\n", kClassName, __func__, line.c_str());
             if (line.startsWith("BPMCHANGE ")) {
@@ -207,7 +207,8 @@ bool TextScoreParser::getMidiMessage(ScoreParser::MidiMessage* msg) {
                 if (tempo > 0) {
                     tempo_ = tempo;
                 }
-                createSetTempo(msg, tempo_);
+                createSetTempo(msg, duration_, tempo_);
+                duration_ = 0;
                 return true;
             } else if (line.startsWith("TONECHANGE ")) {
                 tone_ = getHeaderValue(line, ' ');
@@ -218,17 +219,18 @@ bool TextScoreParser::getMidiMessage(ScoreParser::MidiMessage* msg) {
                 // [tick] = [msec] * [tick/beat] * [beat/minute] * [minute/msec]
                 duration_ += delay_msec * kDefaultTick * tempo_ / 60000;
             } else if (line.equals("MUSIC_START")) {
-                createSetTempo(msg, tempo_);
+                createSetTempo(msg, 0, tempo_);
                 return true;
             } else if (line.equals("MUSIC_END")) {
                 if (note_ != INVALID_NOTE_NUMBER) {
                     createNoteOff(msg, duration_, note_);
-                    reader_.seek(pos);
+                    file_.seek(pos);
                     note_ = INVALID_NOTE_NUMBER;
                     duration_ = 0;
                     return true;
                 } else {
-                    createEndOfTrack(msg);
+                    createEndOfTrack(msg, duration_);
+                    duration_ = 0;
                     is_end_of_music_ = true;
                     return true;
                 }
@@ -236,7 +238,7 @@ bool TextScoreParser::getMidiMessage(ScoreParser::MidiMessage* msg) {
         } else if (ch == '-' || isDigit(ch)) {
             if (note_ != INVALID_NOTE_NUMBER) {
                 createNoteOff(msg, duration_, note_);
-                reader_.seek(pos);
+                file_.seek(pos);
                 note_ = INVALID_NOTE_NUMBER;
                 duration_ = 0;
                 return true;
@@ -274,7 +276,7 @@ uint16_t TextScoreParser::getRootTick() {
 }
 
 String TextScoreParser::getFileName() {
-    return reader_.name();
+    return file_.name();
 }
 
 int TextScoreParser::getNumberOfScores() {
@@ -285,7 +287,7 @@ bool TextScoreParser::loadScore(int id) {
     if (id < 0 || musics_.size() <= (size_t)id) {
         return false;
     }
-    reader_.seek(musics_[id].offset);
+    file_.seek(musics_[id].offset);
     is_end_of_music_ = false;
     tempo_ = musics_[id].tempo;
     tone_ = musics_[id].tone;

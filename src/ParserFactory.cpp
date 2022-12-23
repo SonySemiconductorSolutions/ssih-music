@@ -50,64 +50,6 @@ static ScoreFileType getFileType(const String& path) {
     }
 }
 
-//楽譜一覧解析
-bool ParserFactory::createPlaylist(const String& path) {
-    SDClass sd;
-    //ファイルオープン
-    if (!sd.begin()) {
-        error_printf("[%s::%s]: SD begin error.\n", kClassName, __func__);
-        return false;
-    }
-    File dir = sd.open(path.c_str());
-    if (!dir) {  //ファイル読み込み(失敗)
-        error_printf("[%s::%s] error:%s open error.\n", kClassName, __func__, path.c_str());
-        return false;
-    }
-
-    if (dir.isDirectory()) {  // 対象がディレクトリの場合
-        playlist_path_ = path + "/" + kPlaylistName;
-        if (sd.exists(playlist_path_.c_str())) {
-            sd.remove(playlist_path_.c_str());
-        }
-        File playlist_file = sd.open(playlist_path_.c_str(), FILE_WRITE);
-        debug_printf("[%s::%s] (Directory)\n", kClassName, __func__);
-        while (true) {
-            File file = dir.openNextFile();
-            //ファイルの読み込み確認
-            if (!file) {
-                break;
-            }
-            if (file.isDirectory()) {  //取得したファイルがディレクトリの場合は無視する
-                continue;
-            }
-            String file_name = file.name();
-            ScoreFileType type = getFileType(file_name);
-            if (type == kScoreFileTypeMidi || type == kScoreFileTypeTxt) {
-                String kSDFullPath = "/mnt/sd0/";
-                //ファイル名をフルパス->カレントパスに変換する
-                String sd_current_path;
-                if (file_name.startsWith(kSDFullPath)) {
-                    sd_current_path = file_name.substring(kSDFullPath.length());
-                } else {
-                    sd_current_path = file_name;
-                }
-
-                String folder_path = getFolderPath(sd_current_path);
-                //ファイルからのカレントパスに変換する
-                String file_current_path = sd_current_path.substring(folder_path.length());
-                debug_printf("[%s::%s]:current \"%s\"\n", kClassName, __func__, file_current_path.c_str());
-                playlist_file.println(file_current_path.c_str());
-            } else if (type == kScoreFileTypeOthers) {
-                error_printf("[%s::%s] error:%s This file is not supported.\n", kClassName, __func__, file_name.c_str());
-            }
-            file.close();
-        }
-        playlist_file.close();
-    }
-
-    return true;
-}
-
 ParserFactory::ParserFactory() {
 }
 
@@ -118,7 +60,7 @@ ScoreParser* ParserFactory::getScoreParser(const String& path) {
     ScoreFileType type = getFileType(path);
     debug_printf("[%s::%s]: path:%s\n", kClassName, __func__, path.c_str());
     SDClass sd;
-    //ファイルオープン
+    // File Open
     if (!sd.begin()) {
         error_printf("[%s::%s]: SD begin error.\n", kClassName, __func__);
         return nullptr;
@@ -151,6 +93,64 @@ ScoreParser* ParserFactory::getScoreParser(const String& path) {
 
     error_printf("[%s::%s] SD: file:%s This file is not supported.\n", kClassName, __func__, path.c_str());
     return nullptr;
+}
+
+// score list analysis
+bool ParserFactory::createPlaylist(const String& path) {
+    SDClass sd;
+    // File Open
+    if (!sd.begin()) {
+        error_printf("[%s::%s]: SD begin error.\n", kClassName, __func__);
+        return false;
+    }
+    File dir = sd.open(path.c_str());
+    if (!dir) {  // Read File (failed)
+        error_printf("[%s::%s] error:%s open error.\n", kClassName, __func__, path.c_str());
+        return false;
+    }
+
+    if (dir.isDirectory()) {  // If the target is a directory
+        playlist_path_ = path + "/" + kPlaylistName;
+        if (sd.exists(playlist_path_.c_str())) {
+            sd.remove(playlist_path_.c_str());
+        }
+        File playlist_file = sd.open(playlist_path_.c_str(), FILE_WRITE);
+        debug_printf("[%s::%s] (Directory)\n", kClassName, __func__);
+        while (true) {
+            File file = dir.openNextFile();
+            // File Read Confirmation
+            if (!file) {
+                break;
+            }
+            if (file.isDirectory()) {  // Ignore retrieved files if they are directories
+                continue;
+            }
+            String file_name = file.name();
+            ScoreFileType type = getFileType(file_name);
+            if (type == kScoreFileTypeMidi || type == kScoreFileTypeTxt) {
+                String kSDFullPath = "/mnt/sd0/";
+                // Convert file name to full path - > current path
+                String sd_current_path;
+                if (file_name.startsWith(kSDFullPath)) {
+                    sd_current_path = file_name.substring(kSDFullPath.length());
+                } else {
+                    sd_current_path = file_name;
+                }
+
+                String folder_path = getFolderPath(sd_current_path);
+                // Convert to current path from file
+                String file_current_path = sd_current_path.substring(folder_path.length());
+                debug_printf("[%s::%s]:current \"%s\"\n", kClassName, __func__, file_current_path.c_str());
+                playlist_file.println(file_current_path.c_str());
+            } else if (type == kScoreFileTypeOthers) {
+                error_printf("[%s::%s] error:%s This file is not supported.\n", kClassName, __func__, file_name.c_str());
+            }
+            file.close();
+        }
+        playlist_file.close();
+    }
+
+    return true;
 }
 
 #endif  // ARDUINO_ARCH_SPRESENSE

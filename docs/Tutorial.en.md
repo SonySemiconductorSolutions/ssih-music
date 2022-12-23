@@ -1,6 +1,6 @@
 # Sound Signal Processing Library for Spresense (2022-11-25 Edition)
 
-The Sound Signal Processing Library for Spresense (called ssprocLib) is a library for easy instrument development in [Spresense](https://developer.sony.com/develop/spresense/).
+The Sound Signal Processing Library for Spresense (called ssprocLib) is a library for easy instrument development in [Spresense](https://www.sony-semicon.co.jp/products/smart-sensing/spresense/).
 It provides an API based on the MIDI standard that defines performance data for electronic instruments, and a software module that easily handles Spresense audio input and output.
 
 You need sound source data to try out ssprocLib.
@@ -23,7 +23,7 @@ Download the sound source data [here](https://github.com/SonySemiconductorSoluti
 Instrument software is developed in the Arduino IDE.
 Follow these steps to install the Arduino IDE, the Spresense Arduino board package, and the Sound Signal Processing Library for Spresense.
 
-1. Using the instructions in the [Spresense Arduino Library Getting Started Guide](https://developer.sony.com/develop/spresense/docs/arduino_set_up_en.html), install the Arduino IDE and the Spresense Arduino board package.
+1. Using the instructions in the [Getting Started with Spresense Arduino guide](https://developer.sony.com/develop/spresense/docs/arduino_set_up_ja.html), install the Arduino IDE and the Spresense Arduino board package.
 2. Install the Sound Signal Processing Library for Spresense in the Arduino IDE.
     1. Download the Source code (zip) from the [Release Page](https://github.com/SonySemiconductorSolutions/ssih-music/releases/).
     2. Open the Arduino IDE and click "Sketch" > "Include Library" > "Install .ZIP Library".
@@ -35,14 +35,14 @@ ssprocLib provides examples of instrument software with Spresense, including ins
 The hardware required to run the sample and its connection instructions are listed below.
 
 * Hardware to use
-    * [Spresense Mainboard](https://developer.sony.com/develop/spresense/specifications)
-    * [Spresense Expansion Board](https://developer.sony.com/develop/spresense/specifications)
+    * [Spresense Mainboard](https://developer.sony.com/ja/develop/spresense/specifications)
+    * [Spresense Expansion Board](https://developer.sony.com/ja/develop/spresense/specifications)
     * [Mic&LCD KIT for SPRESENSE](https://github.com/autolab-fujiwaratakayoshi/MIC-LCD_kit_for_SPRESENSE)
         * 4 microphones
         * Microphone substrate
         * LCD substrate with four switches
     * microSD card
-        * It uses a microSDHC card formatted with FAT 32. It is recommended to format the card with the [SD Memory Card Formatter](https://www.sdcard.org/downloads/formatter/) when using it for the first time.
+        * It uses a microSDHC card formatted with FAT 32. It is recommended to format the card with the [SD Memory Card Formatter](https://www.sdcard.org/ja/downloads-2/formatter-2/) when using it for the first time.
     * Microphone (connected by mini plug (3.5 mm))
         * The microphone comes with the Mic & LCD KIT for SPRESENSE.
     * Speakers (connected by mini plugs (3.5 mm))
@@ -71,7 +71,7 @@ Follow these steps to write a SimpleHorn that sounds the same pitch as your voic
     4. In "Tools" > "Serial Port", click on the COM port where Spresense is connected.
     5. Click "Sketch" > "Write to microcomputer board".
     6. Wait until it says, "Writing to board complete".
-        * If it fails, try again from "Installing the Spresense Bootloader" in the [Spresense Arduino Library Getting Started Guide](https://developer.sony.com/develop/spresense/docs/arduino_set_up_en.html).
+        * If it fails, try again from "Installing the Spresense Bootloader" in the [Getting Started with Spresense Arduino](https://developer.sony.com/develop/spresense/docs/arduino_set_up_ja.html).
 3. Write DSP binaries to SD card.
     1. Open the Arduino IDE and click "File" > "Sample Sketch" > "Audio" > "dsp_installer" > "src_installer".
     2. Click "Tools" > "Board" > "Spresense Board" > "Spresense".
@@ -79,7 +79,7 @@ Follow these steps to write a SimpleHorn that sounds the same pitch as your voic
     4. In "Tools" > "Serial Port", click on the COM port where Spresense is connected.
     5. Click "Sketch" > "Write to microcomputer board".
     6. Wait until it says, "Writing to board complete".
-        * If it fails, try again from "Installing the Spresense Bootloader" in the [Spresense Arduino Library Getting Started Guide](https://developer.sony.com/develop/spresense/docs/arduino_set_up_en.html).
+        * If it fails, try again from "Installing the Spresense Bootloader" in the [Getting Started with Spresense Arduino](https://developer.sony.com/develop/spresense/docs/arduino_set_up_ja.html).
     7. Click "Tools" > "Serial Monitor" to start the serial monitor.
     8. When asked, "Select where to install SRC?" to install it on the SD card, type in "1" and click "Send".
     9. When "Finished" appears, it's over.
@@ -90,7 +90,7 @@ Follow these steps to write a SimpleHorn that sounds the same pitch as your voic
     4. In "Tools" > "Serial Port", click on the COM port where Spresense is connected.
     5. Click "Sketch" > "Write to microcomputer board".
     6. Wait until it says, "Writing to board complete".
-        * If it fails, try again from "Installing the Spresense Bootloader" in the [Spresense Arduino Library Getting Started Guide](https://developer.sony.com/develop/spresense/docs/arduino_set_up_en.html).
+        * If it fails, try again from "Installing the Spresense Bootloader" in the [Getting Started with Spresense Arduino](https://developer.sony.com/develop/spresense/docs/arduino_set_up_ja.html).
 5. Play SimpleHorn.
     * When you hum into the microphone, the instrument sounds according to the pitch of your voice.
 
@@ -177,7 +177,7 @@ The sendNoteOn and sendNoteOff functions take the following arguments:
 | ---        | ---            | ---                                 |
 | `note`     | Note number    | 0~127                               |
 | `velocity` | Velocity       | 0~127                               |
-| `channel`  | Channel number | 0 ~ 15                              |
+| `channel`  | Channel number | 1 ~ 16                              |
 
 ## Make sound using SDSink
 

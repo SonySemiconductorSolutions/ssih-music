@@ -68,27 +68,18 @@ public:
     YuruhornSrc(Filter& filter);
 
     void setPlayingNote(uint8_t new_playing_note);
-
-    // Yuruhorn Function
-    void setActiveThres(int new_active_thres);
-
     int getActiveThres();
-
+    void setActiveThres(int new_active_thres);
     uint8_t getNote(uint32_t freq, uint8_t prev);
-
     int getResult(int8_t* rcvid, VoiceCapture::Result** result, int subid);
+    void setPlayingKey(int playing_key);
 
     bool isAvailable(int param_id) override;
-
     intptr_t getParam(int param_id) override;
-
     bool setParam(int param_id, intptr_t value) override;
 
     bool sendNoteOff(uint8_t note, uint8_t velocity, uint8_t channel) override;
-
     bool sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) override;
-
-    void setPlayingKey(int playing_key);
 
 protected:
     void onCapture(unsigned int freq_numer, unsigned int freq_denom, unsigned int volume) override;
@@ -114,7 +105,6 @@ private:
     bool monitor_enabled_;
 
     int note2index(uint8_t note);
-
     uint8_t decideNote(uint8_t note, uint16_t vol);
 };
 

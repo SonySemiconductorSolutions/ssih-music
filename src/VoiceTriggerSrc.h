@@ -13,6 +13,7 @@
 class VoiceTriggerSrc : public VoiceCapture {
 public:
     VoiceTriggerSrc(Filter& filter);
+    VoiceTriggerSrc(Filter& filter, uint8_t channel);
 
 protected:
     void onCapture(unsigned int freq_numer, unsigned int freq_denom, unsigned int volume) override;
@@ -21,6 +22,7 @@ private:
     bool is_playing_;
     int correct_count_;
     uint8_t play_state_;
+    uint8_t channel_;
 
     bool correctSound();
     int activeVoice(unsigned int freq, unsigned int volume);

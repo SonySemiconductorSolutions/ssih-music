@@ -13,66 +13,39 @@
 
 #include <SDHCI.h>
 
-#include "BufferedFileReader.h"
 #include "YuruInstrumentFilter.h"
-
-static const unsigned kSysExMaxSize = 128;
 
 class ScoreParser {
 public:
+    static const unsigned kSysExMaxSize = 128;
     struct MidiMessage {
-        uint32_t delta_time;  // MIDI用(ScoreSrcでは使用しない)
-
-        uint8_t status_byte;  // SendNoteOn等のMIDIメッセージとチャンネルと各種イベント
-        //通常のMIDIイベント
-        uint8_t data_byte1;  // MIDIメッセージのデータ部1
-        uint8_t data_byte2;  // MIDIメッセージのデータ部2
-
-        uint32_t event_length;  //メタ・SysExイベントの長さ
-        //メタイベント専用
-        uint8_t event_code;  //メタイベントのイベントコード
-
-        //イベントのデータ部
+        uint32_t delta_time;
+        uint8_t status_byte;
+        uint8_t data_byte1;
+        uint8_t data_byte2;
+        // for sysex event and meta-event
+        uint8_t event_code;
+        uint32_t event_length;
         uint8_t sysex_array[kSysExMaxSize];
     };
 
-    enum MetaEventCode {
-        kSequenceNumber = 0x00,
-        kTextEvent = 0x01,
-        kCopyright = 0x02,
-        kTrackName = 0x03,
-        kInstrumentName = 0x04,
-        kLyrics = 0x05,
-        kMarker = 0x06,
-        kCuePoint = 0x07,
-        kEndOfTrack = 0x2f,
-        kSetTempo = 0x51,
-        kMetroNome = 0x52,  // time, rhythm
-        kMusicalKeySignature = 0x59,
-        kSequencerEvent = 0x7F
-    };
-
-    enum MidiMessageType {
-        kNoteOff = 0x80,
-        kNoteOn = 0x90,
-        kPolyphonicKeyPressure = 0xa0,
-        kControlChange = 0xb0,
-        kProgramChange = 0xc0,
-        kChannelPressure = 0xd0,
-        kPitchBendChange = 0xe0,
-        kSysExEvent = 0xf0,
-        kMetaEvent = 0xff
-    };
-
-    virtual ~ScoreParser(){};
+    ScoreParser();
+    virtual ~ScoreParser();
 
     virtual uint16_t getRootTick() = 0;
     virtual String getFileName() = 0;
     virtual int getNumberOfScores() = 0;
     virtual bool loadScore(int id) = 0;
     virtual String getTitle(int id) = 0;
+    bool setEnableTrack(uint16_t value);
+    bool setDisableTrack(uint16_t value);
+    bool setPlayTrack(uint32_t mask);
+    uint32_t getPlayTrack();
 
     virtual bool getMidiMessage(MidiMessage* midi_message) = 0;
+
+private:
+    uint32_t play_track_flags_;
 };
 
 #endif  // SCORE_PARSER_H_

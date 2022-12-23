@@ -6,7 +6,7 @@
 
 //#include <gtest/gtest.h>
 
-#include "BufferedFileReader.h"
+#include "midi_util.h"
 #include "SmfParser.h"
 #include "TextScoreParser.h"
 
@@ -57,7 +57,7 @@ void midiparse() {
 
     SmfParser parser(file_name);
 
-    // MIDIヘッダー解析
+    // MIDI header analysis
     if (getFileType(file_type) == kScoreFileTypeMidi) {
         trace_printf("Midi\n");
         for (int i = 0; i < parser.getNumberOfScores(); i++) {
@@ -74,21 +74,21 @@ void midiparse() {
     for (int i = 0; i < 10; i++) {
         ScoreParser::MidiMessage msg;
         parser.getMidiMessage(&msg);
-        if (msg.status_byte == ScoreParser::kMetaEvent) {
-            if (msg.event_code == ScoreParser::kSetTempo) {
+        if (msg.status_byte == MIDI_MSG_META_EVENT) {
+            if (msg.event_code == MIDI_META_SET_TEMPO) {
                 unsigned long tick = 0;
                 for (int i = 0; i < (int)msg.event_length; i++) {
                     tick = (tick << 8) | msg.sysex_array[i];
                 }
                 printf("%d: delta_time:%d SetTempo tick:%lu\n", i, msg.delta_time, tick);
-            } else if (msg.event_code == ScoreParser::kEndOfTrack) {
+            } else if (msg.event_code == MIDI_META_END_OF_TRACK) {
                 printf("%d: delta_time:%d EndOfTrack\n", i, msg.delta_time);
             } else {
                 printf("%d: delta_time:%d 0x%02X\n", i, msg.delta_time, msg.event_code);
             }
-        } else if ((msg.status_byte & 0xF0) == ScoreParser::kNoteOff) {
+        } else if ((msg.status_byte & 0xF0) == MIDI_MSG_NOTE_OFF) {
             printf("%d: delta_time:%d NoteOff note_num:%d\n", i, msg.delta_time, msg.data_byte1);
-        } else if ((msg.status_byte & 0xF0) == ScoreParser::kNoteOn) {
+        } else if ((msg.status_byte & 0xF0) == MIDI_MSG_NOTE_ON) {
             printf("%d: delta_time:%d NoteOn note_num:%d\n", i, msg.delta_time, msg.data_byte1);
         } else {
             printf("%d: delta_time:%d 0x%02X\n", i, msg.delta_time, msg.status_byte);
@@ -111,7 +111,7 @@ void textparse() {
 
     TextScoreParser parser(file_name);
 
-    // MIDIヘッダー解析
+    // MIDI header analysis
     if (getFileType(file_type) == kScoreFileTypeTxt) {
         trace_printf("Midi\n");
         for (int i = 0; i < parser.getNumberOfScores(); i++) {
@@ -128,21 +128,21 @@ void textparse() {
     for (int i = 0; i < 10; i++) {
         ScoreParser::MidiMessage msg;
         parser.getMidiMessage(&msg);
-        if (msg.status_byte == ScoreParser::kMetaEvent) {
-            if (msg.event_code == ScoreParser::kSetTempo) {
+        if (msg.status_byte == MIDI_MSG_META_EVENT) {
+            if (msg.event_code == MIDI_META_SET_TEMPO) {
                 unsigned long tick = 0;
                 for (int i = 0; i < (int)msg.event_length; i++) {
                     tick = (tick << 8) | msg.sysex_array[i];
                 }
                 printf("%d: delta_time:%d SetTempo tick:%lu\n", i, msg.delta_time, tick);
-            } else if (msg.event_code == ScoreParser::kEndOfTrack) {
+            } else if (msg.event_code == MIDI_META_END_OF_TRACK) {
                 printf("%d: delta_time:%d EndOfTrack\n", i, msg.delta_time);
             } else {
                 printf("%d: delta_time:%d 0x%02X\n", i, msg.delta_time, msg.event_code);
             }
-        } else if ((msg.status_byte & 0xF0) == ScoreParser::kNoteOff) {
+        } else if ((msg.status_byte & 0xF0) == MIDI_MSG_NOTE_OFF) {
             printf("%d: delta_time:%d NoteOff note_num:%d\n", i, msg.delta_time, msg.data_byte1);
-        } else if ((msg.status_byte & 0xF0) == ScoreParser::kNoteOn) {
+        } else if ((msg.status_byte & 0xF0) == MIDI_MSG_NOTE_ON) {
             printf("%d: delta_time:%d NoteOn note_num:%d\n", i, msg.delta_time, msg.data_byte1);
         } else {
             printf("%d: delta_time:%d 0x%02X\n", i, msg.delta_time, msg.status_byte);

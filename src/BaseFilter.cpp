@@ -47,16 +47,16 @@ bool BaseFilter::setParam(int param_id, intptr_t value) {
     return next_filter_->setParam(param_id, value);
 }
 
-bool BaseFilter::sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) {
-    if (next_filter_ == nullptr) {
-        return false;
-    }
-    return next_filter_->sendNoteOn(note, velocity, channel);
-}
-
 bool BaseFilter::sendNoteOff(uint8_t note, uint8_t velocity, uint8_t channel) {
     if (next_filter_ == nullptr) {
         return false;
     }
     return next_filter_->sendNoteOff(note, velocity, channel);
+}
+
+bool BaseFilter::sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) {
+    if (next_filter_ == nullptr) {
+        return false;
+    }
+    return next_filter_->sendNoteOn(note, velocity, channel);
 }

@@ -22,7 +22,6 @@ public:
 
 private:
     String playlist_path_;
-    bool writePlaylist(const String& file_name);
     bool createPlaylist(const String& path);
 };
 

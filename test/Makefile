@@ -14,7 +14,6 @@ GTESTFLAGS = -lgtest -lgtest_main
 GCOVFLAGS = --branch-probabilities --branch-counts
 
 ALL_OBJECTS = ../src/BaseFilter.o \
-              ../src/BufferedFileReader.o \
               ../src/CorrectToneFilter.o \
               ../src/NullFilter.o \
               ../src/OctaveShift.o \
@@ -24,6 +23,7 @@ ALL_OBJECTS = ../src/BaseFilter.o \
               ../src/PcmRenderer.o \
               ../src/PlaylistParser.o \
               ../src/ScoreFilter.o \
+              ../src/ScoreParser.o \
               ../src/ScoreSrc.o \
               ../src/SDSink.o \
               ../src/SmfParser.o \

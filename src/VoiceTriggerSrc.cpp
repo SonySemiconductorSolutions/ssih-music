@@ -12,27 +12,58 @@
 
 #include "VoiceCapture.h"
 
-//送信ノート
-const int kSendDummyNote = 60;
-//補正用定数
+// Outgoing Notes
+const int kSendDummyNote = 127;
+// correction constant
 const int kStartupSoundlessCount = 5;
 const int kSoundlessCount = 2;
 const int kLowVolumeThreshold = 150;
 const int kHighVolumeThreshold = 10000;
 
-//無音か音ありか
+// Silence or sound
 enum CorrectSound {
     kStartupSound = 0,
     kActiveSound,
     kSoundless,
 };
 
-VoiceTriggerSrc::VoiceTriggerSrc(Filter& filter) : VoiceCapture(filter), is_playing_(false), correct_count_(0), play_state_(kStartupSound) {
+VoiceTriggerSrc::VoiceTriggerSrc(Filter& filter) : VoiceTriggerSrc(filter, DEFAULT_CHANNEL) {
+}
+
+VoiceTriggerSrc::VoiceTriggerSrc(Filter& filter, uint8_t channel)
+    : VoiceCapture(filter), is_playing_(false), correct_count_(0), play_state_(kStartupSound), channel_(channel) {
+}
+
+void VoiceTriggerSrc::onCapture(unsigned int freq_numer, unsigned int freq_denom, unsigned int volume) {
+    if (play_state_ == kStartupSound) {
+        if (correct_count_ > kStartupSoundlessCount) {  // Perform silent correction immediately after startup
+            play_state_ = kSoundless;
+            correct_count_ = 0;
+        } else {
+            sendNoteOff(kSendDummyNote, DEFAULT_VELOCITY, channel_);
+            correct_count_++;
+        }
+    } else {
+        play_state_ = activeVoice(freq_numer / freq_denom, volume);
+        if (play_state_ == kActiveSound) {
+            if (!is_playing_) {
+                sendNoteOn(kSendDummyNote, DEFAULT_VELOCITY, channel_);
+                is_playing_ = true;
+            }
+        } else {
+            if (is_playing_) {
+                sendNoteOff(kSendDummyNote, DEFAULT_VELOCITY, channel_);
+                is_playing_ = false;
+            }
+        }
+    }
+
+    BaseFilter::update();
 }
 
 bool VoiceTriggerSrc::correctSound() {
     bool result = false;
-    if (correct_count_ <= kSoundlessCount) {  //無音補正を行う
+    if (correct_count_ <= kSoundlessCount) {  // Perform silence correction
         result = true;
         correct_count_++;
     }
@@ -40,39 +71,12 @@ bool VoiceTriggerSrc::correctSound() {
 }
 
 int VoiceTriggerSrc::activeVoice(unsigned int freq, unsigned int volume) {
-    if (freq <= 0 || (volume < kLowVolumeThreshold || kHighVolumeThreshold < volume)) {  //無音
-        if (!correctSound()) {                                                           //無音補正処理
+    if (freq <= 0 || (volume < kLowVolumeThreshold || kHighVolumeThreshold < volume)) {  // silence
+        if (!correctSound()) {                                                           // Silence correction processing
             return kSoundless;
         }
     }
     return kActiveSound;
-}
-
-void VoiceTriggerSrc::onCapture(unsigned int freq_numer, unsigned int freq_denom, unsigned int volume) {
-    if (play_state_ == kStartupSound) {
-        if (correct_count_ > kStartupSoundlessCount) {  //起動直後の無音補正を行う
-            play_state_ = kSoundless;
-            correct_count_ = 0;
-        } else {
-            sendNoteOff(kSendDummyNote, DEFAULT_VELOCITY, DEFAULT_CHANNEL);
-            correct_count_++;
-        }
-    } else {
-        play_state_ = activeVoice(freq_numer / freq_denom, volume);
-        if (play_state_ == kActiveSound) {
-            if (!is_playing_) {
-                sendNoteOn(kSendDummyNote, DEFAULT_VELOCITY, DEFAULT_CHANNEL);
-                is_playing_ = true;
-            }
-        } else {
-            if (is_playing_) {
-                sendNoteOff(kSendDummyNote, DEFAULT_VELOCITY, DEFAULT_CHANNEL);
-                is_playing_ = false;
-            }
-        }
-    }
-
-    BaseFilter::update();
 }
 
 #endif  // ARDUINO_ARCH_SPRESENSE

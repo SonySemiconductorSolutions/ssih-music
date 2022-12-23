@@ -13,7 +13,6 @@
 
 #include <SDHCI.h>
 
-#include "BufferedFileReader.h"
 #include "ScoreParser.h"
 #include "YuruInstrumentFilter.h"
 
@@ -30,13 +29,13 @@ public:
     PlaylistParser(const String& path);
     ~PlaylistParser();
 
-    bool getMidiMessage(ScoreParser::MidiMessage* midi_message) override;
-
     uint16_t getRootTick() override;
     String getFileName() override;
     int getNumberOfScores() override;
     bool loadScore(int index) override;
     String getTitle(int index) override;
+
+    bool getMidiMessage(ScoreParser::MidiMessage* midi_message) override;
 
 private:
     ScoreParser* parser_;
