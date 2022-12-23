@@ -5,6 +5,7 @@
 
 import argparse
 import os
+import re
 import subprocess
 
 import sfzparser
@@ -44,7 +45,23 @@ def convertNoteToInt(note):
             return (pitch + 0) + (int(note[1:]) - 4) * 12
 
 
-def convertWavFile(input_path, output_path, from_note, to_note):
+def getAudioFs(input_path):
+    # FFMPEG_ARGS = '-hide_banner -loglevel error -y'
+    FFMPEG_ARGS = '-y'
+    command = ' '.join([f'ffmpeg {FFMPEG_ARGS}',
+                        f'-i "{input_path}"'])
+    ffmpeg = subprocess.run(command,
+                            capture_output=True, text=True)
+    pattern = re.compile(r'\s*Stream #(\d+):(\d+): Audio:.* (\d+) Hz,')
+    for line in ffmpeg.stderr.splitlines():
+        m = pattern.match(line)
+        if m:
+            return int(m[3])
+    return None
+
+
+def convertWavFile(input_path, output_path, from_note, to_note,
+                   fs, channels, bit_width):
     """Change the pitch of the sound source file.
     Args:
         input_path: sound source file
@@ -54,13 +71,10 @@ def convertWavFile(input_path, output_path, from_note, to_note):
     """
     # FFMPEG_ARGS = '-hide_banner -loglevel error -y'
     FFMPEG_ARGS = '-y'
-    FS = 48000
-    CHANNELS = 2
-    BIT_WIDTH = 16
     from_freq = int(440 * 2 ** ((from_note - 69) / 12) * 1000 + 0.5)
     to_freq = int(440 * 2 ** ((to_note - 69) / 12) * 1000 + 0.5)
-    aresample = f'aresample={FS}'
-    asetrate = f'asetrate={FS}*{to_freq}/{from_freq}'
+    aresample = f'aresample={fs}'
+    asetrate = f'asetrate={fs}*{to_freq}/{from_freq}'
     atempos = []
     while from_freq * 2 < to_freq:
         from_freq *= 2
@@ -73,7 +87,7 @@ def convertWavFile(input_path, output_path, from_note, to_note):
     command = ' '.join([f'ffmpeg {FFMPEG_ARGS}',
                         f'-i "{input_path}"',
                         f'-af {aresample},{asetrate},{atempo}',
-                        f'-ar {FS} -ac {CHANNELS} -acodec pcm_s{BIT_WIDTH}le',
+                        f'-ar {fs} -ac {channels} -acodec pcm_s{bit_width}le',
                         f'"{output_path}"'])
     output_dir = os.path.dirname(output_path)
     if not os.path.exists(output_dir):
@@ -135,6 +149,10 @@ def getOutputWavPath(sample, from_key, to_key):
 
 
 def parseRegion(context, region):
+    OUT_FS = 48000
+    OUT_CHANNELS = 2
+    OUT_BIT_WIDTH = 16
+
     headers = [context['global'], context['group'], region]
 
     lokey, hikey, pitch_keycenter = getKeyOpcodes(headers)
@@ -151,7 +169,9 @@ def parseRegion(context, region):
         input_path = os.path.join(parent_dir, default_path + sample)
         wav_path = getOutputWavPath(sample, pitch_keycenter, key)
         output_path = os.path.join(output_dir, default_path + wav_path)
-        convertWavFile(input_path, output_path, pitch_keycenter, key)
+        convertWavFile(input_path, output_path, pitch_keycenter, key,
+                       OUT_FS, OUT_CHANNELS, OUT_BIT_WIDTH)
+        fs = getAudioFs(input_path)
         new_region = region.cloneNode()
         for o in new_region.childNodes:
             if o.nodeType != sfzparser.Node.OPCODE_NODE:
@@ -160,6 +180,12 @@ def parseRegion(context, region):
                 o.textContent = str(key)
             if o.nodeName in ['sample']:
                 o.textContent = wav_path.replace('\\', '/')
+            if o.nodeName in ['offset', 'end',
+                              'loop_start', 'loopstart',
+                              'loop_end', 'loopend']:
+                if o.textContent != "-1":
+                    sa = int(o.textContent)
+                    o.textContent = str(int(sa * OUT_FS / fs))
         region.parentNode.insertBefore(new_region, region)
     region.parentNode.removeChild(region)
 
