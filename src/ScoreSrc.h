@@ -7,49 +7,47 @@
 #ifndef SCORE_SRC_H_
 #define SCORE_SRC_H_
 
-#include <time.h>
-
-#include "ParserFactory.h"
 #include "ScoreFilter.h"
-#include "ScoreParser.h"
-#include "SmfParser.h"
 #include "YuruInstrumentFilter.h"
 
 class ScoreSrc : public ScoreFilter {
 public:
     ScoreSrc(const String& file_name, Filter& filter);
     ScoreSrc(const String& file_name, bool auto_start, Filter& filter);
-
     virtual ~ScoreSrc();
 
-    bool setParam(int param_id, intptr_t value) override;
-    intptr_t getParam(int param_id) override;
-    bool isAvailable(int param_id) override;
     bool begin() override;
     void update() override;
 
-private:
-    // ----------------- timing variable -----------------
-    int now_tempo_;           //< txt:曲の拍子, mid:基礎Tickの実時間
-    unsigned long duration_;  //< txt:ノート再生時間, mid:デルタタイムの実時間
-    unsigned long schedule_time_;
+    bool isAvailable(int param_id) override;
+    intptr_t getParam(int param_id) override;
+    bool setParam(int param_id, intptr_t value) override;
 
+    bool sendSongPositionPointer(uint16_t beats) override;
+    bool sendSongSelect(uint8_t song) override;
+    bool sendContinue() override;
+    bool sendStop() override;
+
+    bool setScoreIndex(int index);
+
+private:
+    // schedule
+    int current_tempo_;
+    unsigned long duration_;
+    unsigned long schedule_time_;
     unsigned long total_delta_time_;
 
-    // ----------------- playing status -----------------
-    int play_state_;
+    // playback
     int default_state_;
+    int play_state_;
+    int next_state_;
     bool is_auto_playing_;
-    bool is_waiting_;
+    bool is_event_available_;
     bool is_music_start_;
 
     ScoreParser::MidiMessage midi_message_;
-    ScoreParser::MidiMessage playing_midi_message_;
 
-    bool selectScore(int id);
-    bool executeMetaEvent(const ScoreParser::MidiMessage& midi_message);
-    // bool executeSysExEvent(ScoreParser::MidiMessage& midi_message); //現状は対応させない
-    bool executeMIDIEvent(const ScoreParser::MidiMessage& midi_message);
+    bool executeMidiEvent(const ScoreParser::MidiMessage& msg);
 };
 
 #endif  // SCORE_SRC_H_

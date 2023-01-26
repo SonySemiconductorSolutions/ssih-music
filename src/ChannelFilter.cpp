@@ -8,6 +8,8 @@
 
 #include "ChannelFilter.h"
 
+#include <Arduino.h>
+
 //#define DEBUG (1)
 
 // clang-format off
@@ -32,12 +34,38 @@ ChannelFilter::ChannelFilter(Filter& filter) : ChannelFilter(kAllChannelPlay, fi
 
 ChannelFilter::ChannelFilter(uint16_t channel, Filter& filter) : BaseFilter(filter), channel_flags_(channel) {
 }
+
 ChannelFilter::~ChannelFilter() {
 }
+
+bool ChannelFilter::isAvailable(int param_id) {
+    if (param_id == ChannelFilter::PARAMID_ENABLE_CHANNEL) {
+        return true;
+    } else if (param_id == ChannelFilter::PARAMID_DISABLE_CHANNEL) {
+        return true;
+    } else if (param_id == ChannelFilter::PARAMID_CHANNEL_MASK) {
+        return true;
+    } else {
+        return BaseFilter::isAvailable(param_id);
+    }
+}
+
+intptr_t ChannelFilter::getParam(int param_id) {
+    if (param_id == ChannelFilter::PARAMID_ENABLE_CHANNEL) {
+        return (intptr_t)channel_flags_;
+    } else if (param_id == ChannelFilter::PARAMID_DISABLE_CHANNEL) {
+        return (intptr_t)channel_flags_;
+    } else if (param_id == ChannelFilter::PARAMID_CHANNEL_MASK) {
+        return (intptr_t)channel_flags_;
+    } else {
+        return BaseFilter::getParam(param_id);
+    }
+}
+
 bool ChannelFilter::setParam(int param_id, intptr_t value) {
     if (param_id == ChannelFilter::PARAMID_ENABLE_CHANNEL) {
-        if (0 <= value && value < 16) {
-            uint16_t ch = 1U << value;
+        if (1 <= value && value <= 16) {
+            uint16_t ch = 1U << (value - 1);
             channel_flags_ |= ch;
         } else {
             error_printf("[%s::%s] error: cannot find channel\n", kClassName, __func__);
@@ -46,8 +74,8 @@ bool ChannelFilter::setParam(int param_id, intptr_t value) {
         debug_printf("[%s::%s] channels_flag:%04x\n", kClassName, __func__, channel_flags_);
         return true;
     } else if (param_id == ChannelFilter::PARAMID_DISABLE_CHANNEL) {
-        if (0 <= value && value < 16) {
-            uint16_t ch = 1U << value;
+        if (1 <= value && value <= 16) {
+            uint16_t ch = 1U << (value - 1);
             ch = ~ch;
             channel_flags_ &= ch;
         } else {
@@ -64,40 +92,20 @@ bool ChannelFilter::setParam(int param_id, intptr_t value) {
     }
 }
 
-intptr_t ChannelFilter::getParam(int param_id) {
-    if (param_id == ChannelFilter::PARAMID_ENABLE_CHANNEL) {
-        return (intptr_t)channel_flags_;
-    } else if (param_id == ChannelFilter::PARAMID_DISABLE_CHANNEL) {
-        return (intptr_t)channel_flags_;
-    } else if (param_id == ChannelFilter::PARAMID_CHANNEL_MASK) {
-        return (intptr_t)channel_flags_;
-    } else {
-        return BaseFilter::getParam(param_id);
-    }
-}
-
-bool ChannelFilter::isAvailable(int param_id) {
-    if (param_id == ChannelFilter::PARAMID_ENABLE_CHANNEL) {
-        return true;
-    } else if (param_id == ChannelFilter::PARAMID_DISABLE_CHANNEL) {
-        return true;
-    } else if (param_id == ChannelFilter::PARAMID_CHANNEL_MASK) {
-        return true;
-    } else {
-        return BaseFilter::isAvailable(param_id);
+bool ChannelFilter::sendNoteOff(uint8_t note, uint8_t velocity, uint8_t channel) {
+    if (1 <= channel && channel <= 16) {
+        if (channel_flags_ & (1U << (channel - 1))) {
+            return BaseFilter::sendNoteOff(note, velocity, channel);
+        }
     }
 }
 
 bool ChannelFilter::sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) {
     // debug_printf("[%s::%s] SendNoteOn  note:%d, velocity:%d, channel:%d\n", kClassName, __func__, note, velocity, channel);
-    if (channel_flags_ & (1U << channel)) {
-        return BaseFilter::sendNoteOn(note, velocity, channel);
-    }
-}
-
-bool ChannelFilter::sendNoteOff(uint8_t note, uint8_t velocity, uint8_t channel) {
-    if (channel_flags_ & (1U << channel)) {
-        return BaseFilter::sendNoteOff(note, velocity, channel);
+    if (1 <= channel && channel <= 16) {
+        if (channel_flags_ & (1U << (channel - 1))) {
+            return BaseFilter::sendNoteOn(note, velocity, channel);
+        }
     }
 }
 

@@ -17,7 +17,7 @@
 
 SFZSink sink("SawLpf.sfz");
 CorrectToneFilter filter("SCORE", true, sink);
-VoiceTriggerSrc inst(filter);
+VoiceTriggerSrc inst(filter, DEFAULT_CHANNEL);
 
 void setup() {
     // init built-in I/O

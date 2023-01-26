@@ -177,7 +177,7 @@ The sendNoteOn and sendNoteOff functions take the following arguments:
 | ---        | ---            | ---                                 |
 | `note`     | Note number    | 0~127                               |
 | `velocity` | Velocity       | 0~127                               |
-| `channel`  | Channel number | 0 ~ 15                              |
+| `channel`  | Channel number | 1 ~ 16                              |
 
 ## Make sound using SDSink
 

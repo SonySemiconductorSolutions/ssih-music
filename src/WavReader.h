@@ -23,14 +23,14 @@ public:
     struct WaveHeader {
         WaveHeader();
         char chunk[kWaveChunkSize];
-        uint32_t data_len;          //データ長
-        uint16_t format;            //音声データのフォーマット
-        uint16_t ch;                //チャンネル数
-        uint32_t samples_per_sec;   //サンプリング周波数
-        uint32_t avg_byte_per_sec;  // 1秒あたりのバイト数
-        uint16_t block_align;       //ブロックサイズ
-        uint16_t bits_per_sample;   //ビットレート
-        uint16_t cb_size;           //拡張パラメータ
+        uint32_t data_len;          // Data length
+        uint16_t format;            // Audio Data Format
+        uint16_t ch;                // Number of channels
+        uint32_t samples_per_sec;   // Sampling frequency
+        uint32_t avg_byte_per_sec;  // Bytes per second
+        uint16_t block_align;       // Block size
+        uint16_t bits_per_sample;   // bit rate
+        uint16_t cb_size;           // Extended parameters
     };
 
     WavReader(File& file);
@@ -50,4 +50,5 @@ private:
     bool parseRIFFHeader(File& file, RIFFHeader* riffh);
     bool parseWaveHeader(File& file, WaveHeader* waveh);
 };
+
 #endif  // WAV_READER_H_

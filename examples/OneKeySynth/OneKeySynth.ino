@@ -17,6 +17,7 @@
 SFZSink sink("SawLpf.sfz");
 OneKeySynthesizerFilter inst("SCORE", sink);
 
+static const int PLAY_CHANNEL = DEFAULT_CHANNEL;
 int button4 = HIGH;
 int button5 = HIGH;
 
@@ -47,9 +48,9 @@ void loop() {
     int button4_input = digitalRead(PIN_D04);
     if (button4_input != button4) {
         if (button4_input == LOW) {
-            inst.sendNoteOn(60, DEFAULT_VELOCITY, DEFAULT_CHANNEL);
+            inst.sendNoteOn(OneKeySynthesizerFilter::NOTE_ALL, DEFAULT_VELOCITY, PLAY_CHANNEL);
         } else {
-            inst.sendNoteOff(60, DEFAULT_VELOCITY, DEFAULT_CHANNEL);
+            inst.sendNoteOff(OneKeySynthesizerFilter::NOTE_ALL, DEFAULT_VELOCITY, PLAY_CHANNEL);
         }
         button4 = button4_input;
     }
@@ -57,9 +58,9 @@ void loop() {
     int button5_input = digitalRead(PIN_D05);
     if (button5_input != button5) {
         if (button5_input == LOW) {
-            inst.sendNoteOn(60, DEFAULT_VELOCITY, DEFAULT_CHANNEL);
+            inst.sendNoteOn(OneKeySynthesizerFilter::NOTE_ALL, DEFAULT_VELOCITY, PLAY_CHANNEL);
         } else {
-            inst.sendNoteOff(60, DEFAULT_VELOCITY, DEFAULT_CHANNEL);
+            inst.sendNoteOff(OneKeySynthesizerFilter::NOTE_ALL, DEFAULT_VELOCITY, PLAY_CHANNEL);
         }
         button5 = button5_input;
     }

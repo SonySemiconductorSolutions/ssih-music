@@ -17,58 +17,58 @@ class ScoreFilter : public BaseFilter {
 public:
     enum ParamId {                              // MAGIC CHAR = 'M'
         PARAMID_NUMBER_OF_SCORES = ('G' << 8),  //<
+        PARAMID_ENABLE_TRACK,                   //<
+        PARAMID_DISABLE_TRACK,                  //<
+        PARAMID_TRACK_MASK,                     //<
         PARAMID_SCORE,                          //<
         PARAMID_SCORE_NAME,                     //<
         PARAMID_STATUS                          //<
     };
 
-    enum Status { PAUSE = 0, PLAYING, END_SCORE };
-
-    enum NoteState {
-        kNoteStatePlaying,
-        kNoteStatePause,
-        kNoteStateEnd
-    };
+    enum Status { PAUSE = 0, PLAY, END };
 
     struct Note {
         uint8_t note;
         uint8_t velocity;
         uint8_t channel;
-        NoteState stat;
+        int stat;
     };
 
     ScoreFilter(const String& file_name, Filter& filter);
-
     virtual ~ScoreFilter();
 
-    bool setParam(int param_id, intptr_t value) override;
-    intptr_t getParam(int param_id) override;
-    bool isAvailable(int param_id) override;
     bool begin() override;
-    bool sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) override;
+
+    bool isAvailable(int param_id) override;
+    intptr_t getParam(int param_id) override;
+    bool setParam(int param_id, intptr_t value) override;
+
     bool sendNoteOff(uint8_t note, uint8_t velocity, uint8_t channel) override;
+    bool sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) override;
+    virtual bool sendSongPositionPointer(uint16_t beats);
+    virtual bool sendSongSelect(uint8_t song);
+    virtual bool sendStart();
+    virtual bool sendContinue();
+    virtual bool sendStop();
+    bool sendMidiMessage(uint8_t* msg, size_t length) override;
+
+    bool isParserAvailable();
+    int getNumberOfScores();
+    int getScoreIndex();
+    bool setScoreIndex(int index);
+    uint16_t getRootTick();
 
 protected:
-    bool setScoreIndex(int index);
     bool getMidiMessage(ScoreParser::MidiMessage* midi_message);
-    int getScoreIndex();
-    bool isScoreParserReady();
-    void setStatus(int stat);
-    uint16_t getRootTick();
-    int getNumberOfScores();
-    void pauseAllNotes();
-    void resumeAllNotes();
-    void stopAllNotes();
 
 private:
-    ScoreParser* parser_;
-
     String file_name_;
+    ScoreParser* parser_;
     int score_index_;
-
-    uint16_t root_tick_;  //< txt:曲のBPM, mid:曲の基礎Tick
-
+    uint16_t root_tick_;
     std::vector<Note> playing_notes_;
+
+    uint32_t play_track_flags_;
 };
 
 #endif  // SCORE_FILTER_H_

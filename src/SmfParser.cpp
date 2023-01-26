@@ -8,7 +8,10 @@
 
 #include "SmfParser.h"
 
-//#define DEBUG (1)
+#include "path_util.h"
+#include "midi_util.h"
+
+// #define DEBUG (1)
 // clang-format off
 #define nop(...) do {} while (0)
 // clang-format on
@@ -24,29 +27,124 @@
 
 static const char kClassName[] = "SmfParser";
 
-SmfParser::SmfParser(const String& path)
-    : conductor_index_(0),
-      conductor_delta_time_(0),
-      score_midi_message_(),
-      root_tick_(0),
-      track_data_(),
-      is_smf_score_end_(false),
-      running_status_(0),
-      file_(path.c_str()),
-      reader_(file_) {
+static const int kBufSize = 256;
+static const int kMaxTrack = 32;
+static const int kSmfChunkSize = 4;
+
+struct SmfHeader {
+    char chunk_type[kSmfChunkSize];  // 4Bytes
+    uint32_t length;                 // 4Bytes
+    uint16_t format;                 // 2Bytes
+    uint16_t ntrks;                  // 2Bytes
+    uint16_t division;               // 2Bytes
+};
+
+static bool parseMThd(File& file, SmfHeader* header) {
+    bool ret = true;
+    char chunk[kSmfChunkSize + 1];
+    for (int i = 0; i < kSmfChunkSize; i++) {
+        chunk[i] = file.read();
+    }
+    chunk[kSmfChunkSize] = '\0';
+    strncpy(header->chunk_type, chunk, kSmfChunkSize);
+    if (strncmp(header->chunk_type, "MThd", kSmfChunkSize) != 0) {
+        ret = false;
+    } else {
+        for (size_t i = 0; i < sizeof(header->length); i++) {
+            header->length = (header->length << 8) | (file.read() & 0xFF);
+        }
+        for (size_t i = 0; i < sizeof(header->format); i++) {
+            header->format = (header->format << 8) | (file.read() & 0xFF);
+        }
+        for (size_t i = 0; i < sizeof(header->ntrks); i++) {
+            header->ntrks = (header->ntrks << 8) | (file.read() & 0xFF);
+        }
+        for (size_t i = 0; i < sizeof(header->division); i++) {
+            header->division = (header->division << 8) | (file.read() & 0xFF);
+        }
+        if (header->division & 0x8000) {
+            error_printf("[%s::%s] This MIDI file is not supported.\n", kClassName, __func__);
+            ret = false;
+        }
+    }
+
+    trace_printf("[%s::%s] chunk:%s, length:%d, format:%d, truck:%d, division:%d\n", kClassName, __func__, chunk, header->length, header->format, header->ntrks,
+                 header->division);
+
+    return ret;
+}
+
+static uint32_t parseVariableLength(SmfParser::SegmentReader& reader) {
+    uint32_t length = 0;
+    int ch = 0x00;
+    do {
+        if (!reader.available()) {
+            error_printf("[%s::%s] Error:End Of file.\n", kClassName, __func__);
+            break;
+        }
+        ch = reader.read();
+        length = (length << 7) | (ch & 0x7F);
+    } while (ch & 0x80);
+    return length;
+}
+
+SmfParser::SegmentReader::SegmentReader(File* file, uint32_t offset, uint32_t size)
+    : file_(file), file_pos_(offset), seg_offset_(offset), seg_size_(size), buf_(new uint8_t[kBufSize]), buf_size_(0), buf_pos_(0) {
+}
+
+SmfParser::SegmentReader::~SegmentReader() {
+    if (buf_) {
+        delete[] buf_;
+        buf_ = nullptr;
+    }
+}
+
+size_t SmfParser::SegmentReader::available() {
+    size_t seg_pos = file_pos_ - seg_offset_ + buf_pos_;
+    return seg_size_ - seg_pos;
+}
+
+boolean SmfParser::SegmentReader::reset() {
+    file_pos_ = seg_offset_;
+    buf_size_ = 0;
+    buf_pos_ = 0;
+    return true;
+}
+
+int SmfParser::SegmentReader::read(void) {
+    size_t seg_pos = file_pos_ - seg_offset_ + buf_pos_;
+    if (file_ == nullptr) {
+        return -1;
+    }
+    if (seg_size_ <= seg_pos) {
+        return -1;
+    }
+
+    if (buf_size_ <= buf_pos_) {
+        // read next segment
+        file_pos_ += buf_size_;
+        file_->seek(file_pos_);
+        size_t readable_size = (file_->available() < kBufSize) ? file_->available() : kBufSize;
+        int read_size = file_->read(buf_, readable_size);
+        if (read_size < 0) {
+            return -1;
+        }
+        buf_size_ = read_size;
+        buf_pos_ = 0;
+    }
+
+    return buf_[buf_pos_++];
+}
+
+SmfParser::SmfParser(const String& path) : file_(path.c_str()), root_tick_(0), mtrks_(), is_end_(false), readers_() {
+    file_.seek(0);
+
     parseSMF();
 
     debug_printf("[%s::%s] SMF File name:%s\n", kClassName, __func__, getFileName().c_str());
     debug_printf("[%s::%s] SMF root tick:%d\n", kClassName, __func__, getRootTick());
-    for (size_t i = 0; i < track_data_.size(); i++) {
-        debug_printf("[%s::%s] track id:%d", kClassName, __func__, track_data_[i].track_id);
-        if (track_data_[i].is_conductor) {
-            debug_printf(" (conductor track)\n");
-        } else {
-            debug_printf("\n");
-        }
-        debug_printf("[%s::%s]     start byte :%d\n", kClassName, __func__, track_data_[i].start_byte);
-        debug_printf("[%s::%s]     data length:%d\n", kClassName, __func__, track_data_[i].data_length);
+    for (size_t i = 0; i < mtrks_.size(); i++) {
+        debug_printf("[%s::%s] track id:%d start byte:%d data length:%d\n", kClassName, __func__, mtrks_[i].track_id, mtrks_[i].offset, mtrks_[i].size);
     }
     debug_printf("[%s::%s] playable track num:%d\n", kClassName, __func__, getNumberOfScores());
 }
@@ -55,352 +153,239 @@ SmfParser::~SmfParser() {
     if (file_) {
         file_.close();
     }
-}
-
-uint32_t SmfParser::parseVariableLength() {
-    uint32_t length = 0;
-    unsigned char c;
-    do {
-        if (!reader_.available()) {
-            error_printf("[%s::%s] Error:End Of file.\n", kClassName, __func__);
-            break;
-        }
-        c = (unsigned char)reader_.read();
-        // 7ビットシフト
-        length = length << 7;
-        //取得バイトの下位7ビット取得
-        //下位7ビットの結合
-        length += (c & 0x7F);
-    } while (c & 0x80);
-
-    return length;
-}
-
-bool SmfParser::getMidiMessage(MidiMessage* midi_message) {
-    if (is_smf_score_end_) {
-        midi_message->status_byte = ScoreParser::kMetaEvent;
-        midi_message->event_code = ScoreParser::kEndOfTrack;
-        midi_message->event_length = 0;
-        return false;
-    } else {
-        if (score_midi_message_.status_byte == 0) {
-            parseMTrkEvent(&score_midi_message_);
-        }
-        if (smf_music_conductor_[conductor_index_].event_code == ScoreParser::kEndOfTrack) {
-            memcpy(midi_message, &score_midi_message_, sizeof(*midi_message));
-            memset(&score_midi_message_, 0x00, sizeof(score_midi_message_));
-        } else {
-            debug_printf("[%s::%s] conductor_delta_time_:%d, score_midi_message_.delta_time:%d\n", kClassName, __func__, conductor_delta_time_,
-                         score_midi_message_.delta_time);
-            if (conductor_delta_time_ <= score_midi_message_.delta_time) {
-                memcpy(midi_message, &smf_music_conductor_[conductor_index_], sizeof(*midi_message));
-                midi_message->delta_time = conductor_delta_time_;
-                score_midi_message_.delta_time -= conductor_delta_time_;
-                conductor_index_++;
-                conductor_delta_time_ = smf_music_conductor_[conductor_index_].delta_time;
-            } else {
-                memcpy(midi_message, &score_midi_message_, sizeof(*midi_message));
-                conductor_delta_time_ -= score_midi_message_.delta_time;
-                memset(&score_midi_message_, 0x00, sizeof(score_midi_message_));
-            }
+    for (auto& e : readers_) {
+        if (e.reader) {
+            delete e.reader;
         }
     }
-
-    return true;
-}
-
-const unsigned int kSmfChunkSize = 4;
-
-struct SmfHeader {
-    char chunk[kSmfChunkSize];
-    uint32_t header_len;
-    uint16_t format;     // 2Byte
-    uint16_t track_num;  // 2Byte
-    uint16_t time;       // 2Byte
-};
-
-static bool parseSMFHeader(BufferedFileReader& reader, SmfHeader* header) {
-    bool ret = true;
-    // reader.read(header, sizeof(*header));
-    char chunk[kSmfChunkSize + 1];
-    for (unsigned int i = 0; i < kSmfChunkSize; i++) {
-        chunk[i] = reader.read();
-    }
-    chunk[kSmfChunkSize] = '\0';
-    strncpy(header->chunk, chunk, kSmfChunkSize);
-    if (strncmp(header->chunk, "MThd", kSmfChunkSize) != 0) {
-        ret = false;
-    } else {
-        for (unsigned int i = 0; i < sizeof(header->header_len); i++) {
-            header->header_len = header->header_len << 8;
-            header->header_len += reader.read();
-        }
-        for (unsigned int i = 0; i < sizeof(header->format); i++) {
-            header->format = header->format << 8;
-            header->format += reader.read();
-        }
-        for (unsigned int i = 0; i < sizeof(header->track_num); i++) {
-            header->track_num = header->track_num << 8;
-            header->track_num += reader.read();
-        }
-        for (unsigned int i = 0; i < sizeof(header->time); i++) {
-            header->time = header->time << 8;
-            header->time += reader.read();
-        }
-        if ((header->time >> 8) & 0x80) {
-            error_printf("[%s::%s] This MIDI file is not supported.\n", kClassName, __func__);
-            ret = false;
-        }
-    }
-
-    trace_printf("[%s::%s] chunk:%s, length:%d, format:%d, truck:%d, time:%d\n", kClassName, __func__, chunk, header->header_len, header->format,
-                 header->track_num, header->time);
-
-    return ret;
-}
-
-bool SmfParser::parseSMF() {
-    struct SmfHeader h;
-    if (!parseSMFHeader(reader_, &h)) {
-        return false;
-    }
-    root_tick_ = h.time;
-
-    for (int i = 0; i < h.track_num; i++) {
-        debug_printf("[%s::%s] %d/%d\n", kClassName, __func__, i, h.track_num);
-        parseSMFTrack();
-    }
-
-    return true;
-}
-
-bool SmfParser::parseSMFTrack() {
-    SmfParser::TrackData track = TrackData();
-    //トラックヘッダの取得
-    char chunk[kSmfChunkSize + 1];
-    for (unsigned int i = 0; i < kSmfChunkSize; i++) {
-        chunk[i] = reader_.read();
-    }
-    chunk[kSmfChunkSize] = '\0';
-    if (strncmp(chunk, "MTrk", kSmfChunkSize) != 0) {
-        return false;
-    }
-
-    //トラックデータ長の取得
-    uint32_t track_size = 0;
-    for (unsigned int i = 0; i < sizeof(track_size); i++) {
-        track_size = track_size << 8;
-        track_size += reader_.read();
-    }
-    String track_name = reader_.name();
-    if (track_name.indexOf('/') >= 0) {
-        track_name = track_name.substring(track_name.lastIndexOf('/') + 1);
-    }
-    track.track_id = (int)track_data_.size();
-    track.start_byte = reader_.position();
-    track.data_length = track_size;
-    track.is_conductor = false;
-    track.note_count = 0;
-    track.name = track_name;
-    // TODO: get name from meta-event (Sequence/Track Name: FF 03 Len text)
-
-    uint32_t others_delta_time = 0;
-    track.is_conductor = true;
-    while (true) {
-        if (reader_.position() - track.start_byte > track_size) {
-            break;
-        }
-        ScoreParser::MidiMessage event;
-        parseMTrkEvent(&event);
-        if (event.status_byte == ScoreParser::kMetaEvent) {
-            event.delta_time += others_delta_time;
-            if (track.track_id == 0) {
-                smf_music_conductor_.push_back(event);
-            }
-            others_delta_time = 0;
-            if (event.event_code == ScoreParser::kEndOfTrack) {
-                break;
-            }
-        } else {
-            others_delta_time += event.delta_time;
-            track.is_conductor = false;
-            if ((event.status_byte & 0xF0) == 0x90 && event.data_byte1 > 0) {
-                track.note_count++;
-            }
-        }
-    }
-    if (track.track_id == 0) {
-        for (size_t i = 0; i < smf_music_conductor_.size(); i++) {
-            debug_printf("[%s::%s] delta time:%d, status_byte:%02x, event_code:%02x, event_length:%d (data:", kClassName, __func__,
-                         smf_music_conductor_[i].delta_time, smf_music_conductor_[i].status_byte, smf_music_conductor_[i].event_code,
-                         smf_music_conductor_[i].event_length);
-            for (size_t j = 0; j < smf_music_conductor_[i].event_length; j++) {
-                debug_printf("%02x ", smf_music_conductor_[i].sysex_array[j]);
-            }
-            debug_printf(")\n");
-        }
-    }
-
-    debug_printf("[%s::%s] track_id:%d start_byte=%d data_length=%d is_conductor=%d note_count=%d\n", kClassName, __func__, track.track_id, track.start_byte,
-                 track.data_length, track.is_conductor, track.note_count);
-    track_data_.push_back(track);
-    reader_.seek(track.start_byte + track_size);
-    return true;
-}
-
-bool SmfParser::parseMTrkEvent(ScoreParser::MidiMessage* midi_message) {
-    midi_message->delta_time = parseVariableLength();
-    trace_printf("[%s::%s] delta time:%d\n", kClassName, __func__, midi_message->delta_time);
-    //ステータスバイトの取得
-    uint8_t status_byte = (uint8_t)(reader_.read());
-    trace_printf("[%s::%s] status byte:%02x\n", kClassName, __func__, status_byte);
-
-    uint32_t deta_len = 0;
-    if (status_byte == 0xFF) {  // Meta Event
-        midi_message->status_byte = status_byte;
-        parseMetaEvent(midi_message);
-    } else if (status_byte == 0xF0 || status_byte == 0xF7) {  // SysEx Event
-        deta_len = parseVariableLength();
-        reader_.seek(reader_.position() + deta_len);
-    } else {  // MIDI Event
-        parseSMFEvent(midi_message, status_byte);
-    }
-
-    return true;
-}
-
-bool SmfParser::parseMetaEvent(ScoreParser::MidiMessage* midi_message) {
-    bool ret = true;
-    uint32_t deta_len = 0;
-
-    // metaイベントコードバイトの取得
-    unsigned char event_code = (unsigned char)reader_.read();
-    midi_message->event_code = (uint8_t)event_code;
-
-    deta_len = parseVariableLength();
-    midi_message->event_length = deta_len;
-
-    trace_printf("[%s::%s] (Meta Event) Dt:%d event_code:%02x deta_len:%u ", kClassName, __func__, midi_message->delta_time, event_code,
-                 (unsigned int)deta_len);
-    if (event_code == ScoreParser::kSetTempo && deta_len == 3) {
-        for (unsigned int i = 0; i < deta_len; i++) {
-            unsigned char data = reader_.read();
-            midi_message->sysex_array[i] = (uint8_t)data;
-        }
-    } else if (event_code == ScoreParser::kEndOfTrack) {
-        trace_printf("(Score end)");
-    } else if (event_code < 0x80) {
-        for (unsigned int i = 0; i < deta_len; i++) {
-            if (i < kSysExMaxSize) {
-                midi_message->sysex_array[i] = (uint8_t)reader_.read();
-            }
-        }
-        // reader_.seek(reader_.position() + deta_len);
-    } else {
-        ret = false;
-    }
-    trace_printf("\n");
-    return ret;
-}
-
-static const uint8_t kInvalidParamValue = 0xff;
-bool SmfParser::parseSMFEvent(ScoreParser::MidiMessage* midi_message, uint8_t status_byte) {
-    if (0x80 <= status_byte) {
-        trace_printf("[%s::%s] %02x (MIDI)\n", kClassName, __func__, status_byte);
-        uint8_t stat = status_byte;
-        midi_message->status_byte = stat;
-        parseSMFEventParam(midi_message, stat, kInvalidParamValue);
-        running_status_ = stat;
-    } else {
-        trace_printf("[%s::%s] %02x (MIDI(rs(%02x)))\n", kClassName, __func__, status_byte, running_status_);
-        uint8_t stat = status_byte;
-        midi_message->status_byte = running_status_;
-        parseSMFEventParam(midi_message, running_status_, stat);
-    }
-    return true;
-}
-
-bool SmfParser::parseSMFEventParam(ScoreParser::MidiMessage* midi_message, uint8_t stat, uint8_t param) {
-    if ((0x90 <= stat && stat <= 0x9f)) {  // Note On event
-        if (param == kInvalidParamValue) {
-            midi_message->data_byte1 = reader_.read();
-            midi_message->data_byte2 = reader_.read();
-        } else {
-            midi_message->data_byte1 = param;
-            midi_message->data_byte2 = reader_.read();
-        }
-    } else if ((0x80 <= stat && stat <= 0x8f)) {  // Note Off event.
-        if (param == kInvalidParamValue) {
-            midi_message->data_byte1 = reader_.read();
-            midi_message->data_byte2 = reader_.read();
-        } else {
-            midi_message->data_byte1 = param;
-            midi_message->data_byte2 = reader_.read();
-        }
-    } else if ((0xc0 <= stat && stat <= 0xcf) ||  // Program Change
-               (0xd0 <= stat && stat <= 0xdf)) {  // Channel Pressure
-        if (param == kInvalidParamValue) {
-            midi_message->data_byte1 = reader_.read();
-            midi_message->data_byte2 = 0;
-        } else {
-            midi_message->data_byte1 = param;
-            midi_message->data_byte2 = 0;
-        }
-    } else {  // Control Change & Polyphonic Key Pressure & Pitch Bend Change
-        if (param == kInvalidParamValue) {
-            midi_message->data_byte1 = reader_.read();
-            midi_message->data_byte2 = reader_.read();
-        } else {
-            midi_message->data_byte1 = param;
-            midi_message->data_byte2 = reader_.read();
-        }
-    }
-
-    return true;
 }
 
 uint16_t SmfParser::getRootTick() {
     return root_tick_;
 }
 
+String SmfParser::getFileName() {
+    return file_.name();
+}
+
 int SmfParser::getNumberOfScores() {
-    if (track_data_.size() > 0) {
+    if (mtrks_.size() > 0) {
         return 1;
     } else {
         return 0;
     }
 }
 
-String SmfParser::getFileName() {
-    return reader_.name();
-}
-
 bool SmfParser::loadScore(int id) {
-    debug_printf("[%s::%s] %d/%d\n", kClassName, __func__, id, (int)track_data_.size());
+    debug_printf("[%s::%s] file=%s id=%d mtrks=%d mask=%08X\n", kClassName, __func__, file_.name(), id, (int)mtrks_.size(), getPlayTrack());
 
-    int first_playable_track = 0;
-    for (size_t i = 0; i < track_data_.size(); i++) {
-        if (track_data_[i].note_count > 0) {
-            debug_printf("[%s::%s] track=%d,note_count=%d\n", kClassName, __func__, (int)i, track_data_[i].note_count);
-            first_playable_track = i;
-            break;
+    for (auto& e : readers_) {
+        if (e.reader) {
+            delete e.reader;
         }
     }
-    reader_.seek(track_data_[first_playable_track].start_byte);
-    if (smf_music_conductor_.size() > 0) {
-        conductor_delta_time_ = smf_music_conductor_[0].delta_time;
-    } else {
-        conductor_delta_time_ = 0;
+    readers_.clear();
+
+    for (size_t i = 0; i < mtrks_.size(); i++) {
+        TrackReader track;
+        track.reader = new SegmentReader(&file_, mtrks_[i].offset, mtrks_[i].size);
+        if (getPlayTrack() & (1U << i)) {
+            track.at_eot = false;
+        } else {
+            track.at_eot = true;
+        }
+        track.is_registered = false;
+        readers_.push_back(track);
     }
-    conductor_index_ = 0;
+
+    is_end_ = false;
     return true;
 }
 
 String SmfParser::getTitle(int id) {
-    if (id < 0 || track_data_.size() <= (size_t)id) {
+    if (id < 0 || mtrks_.size() <= (size_t)id) {
         return String();
     }
-    return track_data_[id].name;
+    return mtrks_[id].name;
 };
+
+bool SmfParser::getMidiMessage(MidiMessage* midi_message) {
+    if (is_end_) {
+        midi_message->status_byte = MIDI_MSG_META_EVENT;
+        midi_message->event_code = MIDI_META_END_OF_TRACK;
+        midi_message->event_length = 0;
+        return false;
+    }
+
+    // find earliest MIDI message
+    TrackReader* earliest = nullptr;
+    for (auto& e : readers_) {
+        if (e.at_eot) {
+            continue;
+        }
+        if (!e.is_registered) {
+            if (parseMTrkEvent(e, &e.msg) == false) {
+                e.at_eot = true;
+                continue;
+            } else {
+                e.is_registered = true;
+                if (e.msg.status_byte == MIDI_MSG_META_EVENT && e.msg.event_code == MIDI_META_END_OF_TRACK) {
+                    e.at_eot = true;
+                    continue;
+                }
+            }
+        }
+        if (earliest == nullptr) {
+            earliest = &e;
+        } else if (e.msg.delta_time < earliest->msg.delta_time) {
+            earliest = &e;
+        }
+    }
+    if (earliest == nullptr) {
+        debug_printf("[%s::%s] all tracks at end\n", kClassName, __func__);
+        is_end_ = true;
+        midi_message->status_byte = MIDI_MSG_META_EVENT;
+        midi_message->event_code = MIDI_META_END_OF_TRACK;
+        midi_message->event_length = 0;
+        return true;
+    }
+
+    // pop earliest MIDI message
+    memcpy(midi_message, &earliest->msg, sizeof(*midi_message));
+    debug_printf("[%s::%s] delta_time:%ld, status_byte:%02x, event_code:%02x\n", kClassName, __func__, (unsigned long)earliest->msg.delta_time,
+                 earliest->msg.status_byte, earliest->msg.event_code);
+    earliest->is_registered = false;
+
+    // substract delta_time
+    for (auto& e : readers_) {
+        if (e.is_registered) {
+            e.msg.delta_time -= earliest->msg.delta_time;
+        }
+    }
+
+    return true;
+}
+
+bool SmfParser::parseSMF() {
+    struct SmfHeader mthd;
+    if (!parseMThd(file_, &mthd)) {
+        return false;
+    }
+    root_tick_ = mthd.division;
+
+    for (int i = 0; i < mthd.ntrks && i < kMaxTrack; i++) {
+        debug_printf("[%s::%s] %d/%d\n", kClassName, __func__, i, mthd.ntrks);
+        parseMTrk();
+    }
+
+    return true;
+}
+
+bool SmfParser::parseMTrk() {
+    // Get Track Headers
+    char chunk[kSmfChunkSize + 1];
+    for (int i = 0; i < kSmfChunkSize; i++) {
+        chunk[i] = file_.read();
+    }
+    chunk[kSmfChunkSize] = '\0';
+    if (strncmp(chunk, "MTrk", kSmfChunkSize) != 0) {
+        return false;
+    }
+
+    // Get track data length
+    uint32_t track_size = 0;
+    for (size_t i = 0; i < sizeof(track_size); i++) {
+        track_size = track_size << 8;
+        track_size += file_.read();
+    }
+
+    SmfParser::MTrkSegment mtrk;
+    mtrk.track_id = (int)mtrks_.size();
+    mtrk.offset = file_.position();
+    mtrk.size = track_size;
+    mtrk.name = getBaseName(file_.name());  // TODO: get name from meta-event (Sequence/Track Name: FF 03 Len text)
+    debug_printf("[%s::%s] track_id:%d offset=%d size=%d\n", kClassName, __func__, mtrk.track_id, mtrk.offset, mtrk.size);
+    mtrks_.push_back(mtrk);
+
+    file_.seek(mtrk.offset + mtrk.size);
+
+    return true;
+}
+
+bool SmfParser::parseMTrkEvent(TrackReader& track, ScoreParser::MidiMessage* midi_message) {
+    if (!track.reader->available()) {
+        return false;
+    }
+
+    midi_message->delta_time = parseVariableLength(*track.reader);
+    uint8_t status_byte = (uint8_t)(track.reader->read());
+    trace_printf("[%s::%s] delta time:%d status byte:%02x\n", kClassName, __func__, midi_message->delta_time, status_byte);
+
+    if (status_byte == MIDI_MSG_META_EVENT) {
+        midi_message->status_byte = status_byte;
+        return parseMetaEvent(track, midi_message);
+    } else if (status_byte == MIDI_MSG_SYS_EX_EVENT || status_byte == MIDI_MSG_END_OF_EXCLUSIVE) {
+        uint32_t deta_len = parseVariableLength(*track.reader);
+        for (uint32_t i = 0; i < deta_len; i++) {
+            track.reader->read();
+        }
+        return true;
+    } else {
+        return parseMIDIEvent(track, midi_message, status_byte);
+    }
+}
+
+bool SmfParser::parseMIDIEvent(TrackReader& track, ScoreParser::MidiMessage* midi_message, uint8_t status_byte) {
+    uint8_t bytes[3] = {track.running_status, 0, 0};
+    int write_offset = 0;
+    int param_num = 0;
+    if (status_byte & 0x80) {
+        bytes[0] = status_byte;
+        write_offset = 1;
+    } else {
+        bytes[1] = status_byte;
+        write_offset = 2;
+    }
+    if ((bytes[0] & 0xF0) == MIDI_MSG_PROGRAM_CHANGE ||    // Program Change
+        (bytes[0] & 0xF0) == MIDI_MSG_CHANNEL_PRESSURE) {  // Channel Pressure
+        param_num = 1;
+    } else {
+        param_num = 2;
+    }
+    for (int i = write_offset; i <= param_num; i++) {
+        bytes[i] = (uint8_t)track.reader->read();
+    }
+    midi_message->status_byte = bytes[0];
+    midi_message->data_byte1 = bytes[1];
+    midi_message->data_byte2 = bytes[2];
+    track.running_status = bytes[0];
+    return true;
+}
+
+bool SmfParser::parseMetaEvent(TrackReader& track, ScoreParser::MidiMessage* midi_message) {
+    uint8_t event_code = (uint8_t)track.reader->read();
+    midi_message->event_code = (uint8_t)event_code;
+
+    uint32_t len = parseVariableLength(*track.reader);
+    midi_message->event_length = len;
+
+    trace_printf("[%s::%s] (Meta Event) Dt:%d event_code:%02x len:%u\n", kClassName, __func__, midi_message->delta_time, event_code, (unsigned int)len);
+    if (event_code == MIDI_META_SET_TEMPO && len == MIDI_METALEN_SET_TEMPO) {
+        for (uint32_t i = 0; i < len; i++) {
+            midi_message->sysex_array[i] = (uint8_t)track.reader->read();
+        }
+    } else if (event_code == MIDI_META_END_OF_TRACK) {
+        trace_printf("[%s::%s] (Score end)\n", kClassName, __func__);
+    } else if (event_code < 0x80) {
+        for (uint32_t i = 0; i < len; i++) {
+            if (i < kSysExMaxSize) {
+                midi_message->sysex_array[i] = (uint8_t)track.reader->read();
+            }
+        }
+    } else {
+        return false;
+    }
+    return true;
+}
 
 #endif  // ARDUINO_ARCH_SPRESENSE

@@ -91,6 +91,7 @@ void YuruhornSrc::NoteHistory::update(uint8_t note) {
         exp_[newest_note / PITCH_NUM]++;
     }
 }
+
 uint8_t YuruhornSrc::NoteHistory::lookup(uint8_t note) {
     int pitch = note % PITCH_NUM;
     if (pitch_[pitch] == HISTORY_LEN) {
@@ -105,48 +106,6 @@ uint8_t YuruhornSrc::NoteHistory::lookup(uint8_t note) {
         return exp * PITCH_NUM + pitch;
     }
     return note;
-}
-
-int YuruhornSrc::note2index(uint8_t note) {
-    int ret = -1;
-
-    for (size_t i = 0; i < freq2note_.size(); i++) {
-        if (freq2note_[i].note == note) {
-            ret = i;
-            break;
-        }
-    }
-
-    return ret;
-}
-
-uint8_t YuruhornSrc::decideNote(uint8_t note, uint16_t vol) {
-    uint8_t ret = note;
-
-    // if input volume is enough, keep making the sound
-    if (note == INVALID_NOTE_NUMBER && vol >= active_thres_) {
-        if (invalid_counter_ < extend_frames_) {
-            invalid_counter_++;
-            ret = playing_note_;
-        }
-    } else {
-        invalid_counter_ = 0;
-    }
-
-    if (vol < active_thres_) {
-        active_counter_ = 0;
-        if (silent_counter_ < keep_frames_) {
-            ret = playing_note_;
-        }
-        silent_counter_++;
-    } else {
-        if (active_counter_ < suppress_frames_) {
-            ret = INVALID_NOTE_NUMBER;
-        }
-        active_counter_++;
-        silent_counter_ = 0;
-    }
-    return ret;
 }
 
 YuruhornSrc::YuruhornSrc(Filter& filter)
@@ -175,14 +134,13 @@ void YuruhornSrc::setPlayingNote(uint8_t new_playing_note) {
     playing_note_ = new_playing_note;
 }
 
-// Yuruhorn Function
+int YuruhornSrc::getActiveThres() {
+    return active_thres_;
+}
+
 void YuruhornSrc::setActiveThres(int new_active_thres) {
     active_thres_ = new_active_thres;
     return;
-}
-
-int YuruhornSrc::getActiveThres() {
-    return active_thres_;
 }
 
 uint8_t YuruhornSrc::getNote(uint32_t freq, uint8_t prev) {
@@ -226,17 +184,11 @@ uint8_t YuruhornSrc::getNote(uint32_t freq, uint8_t prev) {
     return note;
 }
 
-bool YuruhornSrc::sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) {
-#ifdef ENABLE_PROFILE
-    digitalWrite(PIN_D17, HIGH);
-#endif
-    setPlayingNote(note);
-    return BaseFilter::sendNoteOn(note, velocity, channel);
-}
+int YuruhornSrc::getResult(int8_t* rcvid, VoiceCapture::Result** result, int subid) {
+    int ret;
 
-bool YuruhornSrc::sendNoteOff(uint8_t note, uint8_t velocity, uint8_t channel) {
-    setPlayingNote(INVALID_NOTE_NUMBER);
-    return BaseFilter::sendNoteOff(note, velocity, channel);
+    ret = MP.Recv(rcvid, result, subid);
+    return ret;
 }
 
 void YuruhornSrc::setPlayingKey(int playing_key) {
@@ -262,6 +214,71 @@ void YuruhornSrc::setPlayingKey(int playing_key) {
         freq2note_.push_back(freq2note_all[freq2note_.back().note + 2]);
     }
     return;
+}
+
+bool YuruhornSrc::sendNoteOff(uint8_t note, uint8_t velocity, uint8_t channel) {
+    setPlayingNote(INVALID_NOTE_NUMBER);
+    return BaseFilter::sendNoteOff(note, velocity, channel);
+}
+
+bool YuruhornSrc::sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) {
+#ifdef ENABLE_PROFILE
+    digitalWrite(PIN_D17, HIGH);
+#endif
+    setPlayingNote(note);
+    return BaseFilter::sendNoteOn(note, velocity, channel);
+}
+
+bool YuruhornSrc::isAvailable(int param_id) {
+    if (param_id == YuruhornSrc::PARAMID_ACTIVE_LEVEL) {
+        return true;
+    } else if (param_id == YuruhornSrc::PARAMID_PLAY_BUTTON_ENABLE) {
+        return true;
+    } else if (param_id == YuruhornSrc::PARAMID_MAX_NOTE) {
+        return true;
+    } else if (param_id == YuruhornSrc::PARAMID_MIN_NOTE) {
+        return true;
+    } else if (param_id == YuruhornSrc::PARAMID_SCALE) {
+        return true;
+    } else if (param_id == YuruhornSrc::PARAMID_CORRECT_FRAMES) {
+        return true;
+    } else if (param_id == YuruhornSrc::PARAMID_SUPPRESS_FRAMES) {
+        return true;
+    } else if (param_id == YuruhornSrc::PARAMID_KEEP_FRAMES) {
+        return true;
+    } else if (param_id == YuruhornSrc::PARAMID_VOLUME_METER) {
+        return true;
+    } else if (param_id == YuruhornSrc::PARAMID_MONITOR_ENABLE) {
+        return true;
+    } else {
+        return VoiceCapture::isAvailable(param_id);
+    }
+}
+
+intptr_t YuruhornSrc::getParam(int param_id) {
+    if (param_id == YuruhornSrc::PARAMID_ACTIVE_LEVEL) {
+        return getActiveThres();
+    } else if (param_id == YuruhornSrc::PARAMID_PLAY_BUTTON_ENABLE) {
+        return performance_button_enabled_;
+    } else if (param_id == YuruhornSrc::PARAMID_MAX_NOTE) {
+        return max_playing_note_;
+    } else if (param_id == YuruhornSrc::PARAMID_MIN_NOTE) {
+        return min_playing_note_;
+    } else if (param_id == YuruhornSrc::PARAMID_SCALE) {
+        return playing_scale_;
+    } else if (param_id == YuruhornSrc::PARAMID_CORRECT_FRAMES) {
+        return extend_frames_;
+    } else if (param_id == YuruhornSrc::PARAMID_SUPPRESS_FRAMES) {
+        return suppress_frames_;
+    } else if (param_id == YuruhornSrc::PARAMID_KEEP_FRAMES) {
+        return keep_frames_;
+    } else if (param_id == YuruhornSrc::PARAMID_VOLUME_METER) {
+        return input_level_;
+    } else if (param_id == YuruhornSrc::PARAMID_MONITOR_ENABLE) {
+        return monitor_enabled_;
+    } else {
+        return VoiceCapture::getParam(param_id);
+    }
 }
 
 bool YuruhornSrc::setParam(int param_id, intptr_t value) {
@@ -295,65 +312,6 @@ bool YuruhornSrc::setParam(int param_id, intptr_t value) {
         return VoiceCapture::setParam(param_id, value);
     }
     return true;
-}
-
-intptr_t YuruhornSrc::getParam(int param_id) {
-    if (param_id == YuruhornSrc::PARAMID_ACTIVE_LEVEL) {
-        return getActiveThres();
-    } else if (param_id == YuruhornSrc::PARAMID_PLAY_BUTTON_ENABLE) {
-        return performance_button_enabled_;
-    } else if (param_id == YuruhornSrc::PARAMID_MAX_NOTE) {
-        return max_playing_note_;
-    } else if (param_id == YuruhornSrc::PARAMID_MIN_NOTE) {
-        return min_playing_note_;
-    } else if (param_id == YuruhornSrc::PARAMID_SCALE) {
-        return playing_scale_;
-    } else if (param_id == YuruhornSrc::PARAMID_CORRECT_FRAMES) {
-        return extend_frames_;
-    } else if (param_id == YuruhornSrc::PARAMID_SUPPRESS_FRAMES) {
-        return suppress_frames_;
-    } else if (param_id == YuruhornSrc::PARAMID_KEEP_FRAMES) {
-        return keep_frames_;
-    } else if (param_id == YuruhornSrc::PARAMID_VOLUME_METER) {
-        return input_level_;
-    } else if (param_id == YuruhornSrc::PARAMID_MONITOR_ENABLE) {
-        return monitor_enabled_;
-    } else {
-        return VoiceCapture::getParam(param_id);
-    }
-}
-
-int YuruhornSrc::getResult(int8_t* rcvid, VoiceCapture::Result** result, int subid) {
-    int ret;
-
-    ret = MP.Recv(rcvid, result, subid);
-    return ret;
-}
-
-bool YuruhornSrc::isAvailable(int param_id) {
-    if (param_id == YuruhornSrc::PARAMID_ACTIVE_LEVEL) {
-        return true;
-    } else if (param_id == YuruhornSrc::PARAMID_PLAY_BUTTON_ENABLE) {
-        return true;
-    } else if (param_id == YuruhornSrc::PARAMID_MAX_NOTE) {
-        return true;
-    } else if (param_id == YuruhornSrc::PARAMID_MIN_NOTE) {
-        return true;
-    } else if (param_id == YuruhornSrc::PARAMID_SCALE) {
-        return true;
-    } else if (param_id == YuruhornSrc::PARAMID_CORRECT_FRAMES) {
-        return true;
-    } else if (param_id == YuruhornSrc::PARAMID_SUPPRESS_FRAMES) {
-        return true;
-    } else if (param_id == YuruhornSrc::PARAMID_KEEP_FRAMES) {
-        return true;
-    } else if (param_id == YuruhornSrc::PARAMID_VOLUME_METER) {
-        return true;
-    } else if (param_id == YuruhornSrc::PARAMID_MONITOR_ENABLE) {
-        return true;
-    } else {
-        return VoiceCapture::isAvailable(param_id);
-    }
 }
 
 void YuruhornSrc::onCapture(unsigned int freq_numer, unsigned int freq_denom, unsigned int volume) {
@@ -409,6 +367,48 @@ void YuruhornSrc::onCapture(unsigned int freq_numer, unsigned int freq_denom, un
     prev_btn_ = btn;
 
     ledOff(LED2);
+}
+
+int YuruhornSrc::note2index(uint8_t note) {
+    int ret = -1;
+
+    for (size_t i = 0; i < freq2note_.size(); i++) {
+        if (freq2note_[i].note == note) {
+            ret = i;
+            break;
+        }
+    }
+
+    return ret;
+}
+
+uint8_t YuruhornSrc::decideNote(uint8_t note, uint16_t vol) {
+    uint8_t ret = note;
+
+    // if input volume is enough, keep making the sound
+    if (note == INVALID_NOTE_NUMBER && vol >= active_thres_) {
+        if (invalid_counter_ < extend_frames_) {
+            invalid_counter_++;
+            ret = playing_note_;
+        }
+    } else {
+        invalid_counter_ = 0;
+    }
+
+    if (vol < active_thres_) {
+        active_counter_ = 0;
+        if (silent_counter_ < keep_frames_) {
+            ret = playing_note_;
+        }
+        silent_counter_++;
+    } else {
+        if (active_counter_ < suppress_frames_) {
+            ret = INVALID_NOTE_NUMBER;
+        }
+        active_counter_++;
+        silent_counter_ = 0;
+    }
+    return ret;
 }
 
 #endif  // ARDUINO_ARCH_SPRESENSE

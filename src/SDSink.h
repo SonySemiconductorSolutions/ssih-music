@@ -44,9 +44,11 @@ public:
     // Filter, NullFilter
     bool begin() override;
     void update() override;
+
     bool isAvailable(int param_id) override;
     intptr_t getParam(int param_id) override;
     bool setParam(int param_id, intptr_t value) override;
+
     bool sendNoteOff(uint8_t note, uint8_t velocity, uint8_t channel) override;
     bool sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) override;
 

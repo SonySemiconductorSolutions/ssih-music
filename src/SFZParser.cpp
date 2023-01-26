@@ -70,13 +70,13 @@ void SFZParser::parse(File sfz_file, const String& sfz_file_path, SFZHandler* ha
         kReady,
         kExpectMacro,
         kMacro,
-        kExpectIncludePath,
-        kIncludePath,
-        kIncludeEsc,
         kExpectDefineName,
         kDefineName,
         kExpectDefineValue,
         kDefineValue,
+        kExpectIncludePath,
+        kIncludePath,
+        kIncludeEsc,
         kHeader,
         kExpectHeaderName,
         kHeaderName,
@@ -88,13 +88,14 @@ void SFZParser::parse(File sfz_file, const String& sfz_file_path, SFZHandler* ha
 
     State state = kReady;
     bool skip_line = false;
-    String macro;
+    String macro_name;
+    String header_name;
+
     String include_path;
     String define_name;
     String define_value;
-    String header_name;
-    String opcode;
-    String value;
+    String opcode_name;
+    String value_str;
     int value_tokens = 0;
     int value_last_token_pos = -1;
 
@@ -113,75 +114,108 @@ void SFZParser::parse(File sfz_file, const String& sfz_file_path, SFZHandler* ha
         } else {
             ch = sfz_file.read();
         }
-        if (skip_line) {
-            if (ch == '\r' || ch == '\n') {
-                skip_line = false;
+        if (ch >= 0) {
+            if (skip_line) {
+                if (ch == '\r' || ch == '\n') {
+                    skip_line = false;
+                } else {
+                    continue;
+                }
             }
-            continue;
-        }
-        if (ch == '/') {
-            next_ch = sfz_file.read();
-            if (next_ch == '/') {
-                skip_line = true;
-                next_ch = -1;
-                continue;
+            if (ch == '/') {
+                next_ch = sfz_file.read();
+                if (next_ch == '/') {
+                    skip_line = true;
+                    next_ch = -1;
+                    continue;
+                }
             }
         }
         trace_printf("[%s::%s] state=%d ch=0x%02X(%c)\n", kClassName, __func__, state, ch, (ch < 0 || ch == '\r' || ch == '\n') ? ' ' : ch);
         if (state == kReady) {
             if (ch == '#') {
-                macro = "";
                 state = kExpectMacro;
+                macro_name = "";
             } else if (ch == '<') {
                 if (header_name != "") {
                     handler->endHeader(header_name);
                 }
-                header_name = "";
                 state = kExpectHeaderName;
+                header_name = "";
+            } else if (ch == '=') {
+                state = kWaitValue;
             } else if (isGraphX(ch)) {
-                opcode = String((char)ch);
                 state = kOpcode;
+                opcode_name = String((char)ch);
             }
         } else if (state == kExpectMacro) {
-            if (isGraphX(ch)) {
-                macro = String((char)ch);
-                state = kMacro;
-            } else if (ch < 0 || ch == '\r' || ch == '\n') {
-                next_ch = ch;
-                skip_line = true;
+            if (ch < 0 || ch == '\r' || ch == '\n') {
                 state = kReady;
+            } else if (isGraphX(ch)) {
+                state = kMacro;
+                macro_name = String((char)ch);
             }
         } else if (state == kMacro) {
-            if (isWhitespace(ch)) {
-                if (macro == "include") {
-                    include_path = "";
-                    state = kExpectIncludePath;
-                } else if (macro == "define") {
-                    define_name = "";
+            if (ch < 0 || ch == '\r' || ch == '\n') {
+                state = kReady;
+            } else if (isWhitespace(ch)) {
+                if (macro_name == "define") {
                     state = kExpectDefineName;
+                    define_name = "";
+                } else if (macro_name == "include") {
+                    state = kExpectIncludePath;
+                    include_path = "";
                 } else {
-                    skip_line = true;
                     state = kReady;
                 }
-            } else if (ch < 0 || ch == '\r' || ch == '\n') {
-                next_ch = ch;
-                skip_line = true;
-                state = kReady;
             } else {
-                macro += (char)ch;
+                macro_name += (char)ch;
+            }
+        } else if (state == kExpectDefineName) {
+            if (ch < 0 || ch == '\r' || ch == '\n') {
+                state = kReady;
+            } else if (ch == '$') {
+                state = kDefineName;
+                define_name = String((char)ch);
+            }
+        } else if (state == kDefineName) {
+            if (ch < 0 || ch == '\r' || ch == '\n') {
+                state = kReady;
+            } else if (isGraphX(ch)) {
+                define_name += (char)ch;
+            } else {
+                state = kExpectDefineValue;
+                define_value = "";
+            }
+        } else if (state == kExpectDefineValue) {
+            if (ch < 0 || ch == '\r' || ch == '\n') {
+                state = kReady;
+            } else if (isGraphX(ch)) {
+                state = kDefineValue;
+                define_value = String((char)ch);
+            }
+        } else if (state == kDefineValue) {
+            if (ch < 0 || ch == '\r' || ch == '\n' || isWhitespace(ch)) {
+                state = kReady;
+                String n = replaceString(define_name, define_names_, define_values_);
+                String v = replaceString(define_value, define_names_, define_values_);
+                define_names_.push_back(n);
+                define_values_.push_back(v);
+            } else if (isGraphX(ch)) {
+                define_value += (char)ch;
             }
         } else if (state == kExpectIncludePath) {
-            if (ch == '"') {
-                include_path = "";
-                state = kIncludePath;
-            } else if (ch < 0 || ch == '\r' || ch == '\n') {
-                next_ch = ch;
-                skip_line = true;
+            if (ch < 0 || ch == '\r' || ch == '\n') {
                 state = kReady;
+            } else if (ch == '"') {
+                state = kIncludePath;
+                include_path = "";
             }
         } else if (state == kIncludePath) {
-            if (ch == '"') {
-                String path = getFolderPath(sfz_file_path) + include_path;
+            if (ch < 0 || ch == '\r' || ch == '\n') {
+                state = kReady;
+            } else if (ch == '"') {
+                String path = joinPath(getFolderPath(sfz_file_path), include_path);
                 File include_file = File(path.c_str());
                 if (include_file) {
                     debug_printf("[%s::%s] parsing '%s'\n", kClassName, __func__, path.c_str());
@@ -190,14 +224,9 @@ void SFZParser::parse(File sfz_file, const String& sfz_file_path, SFZHandler* ha
                 } else {
                     error_printf("[%s::%s] error: cannot open '%s'\n", kClassName, __func__, path.c_str());
                 }
-                skip_line = true;
                 state = kReady;
             } else if (ch == '\\') {
                 state = kIncludeEsc;
-            } else if (ch < 0 || ch == '\r' || ch == '\n') {
-                next_ch = ch;
-                skip_line = true;
-                state = kReady;
             } else {
                 include_path += (char)ch;
             }
@@ -206,125 +235,106 @@ void SFZParser::parse(File sfz_file, const String& sfz_file_path, SFZHandler* ha
                 include_path += (char)ch;
             }
             state = kIncludePath;
-        } else if (state == kExpectDefineName) {
-            if (ch == '$') {
-                define_name = String((char)ch);
-                state = kDefineName;
-            } else if (ch < 0 || ch == '\r' || ch == '\n') {
-                next_ch = ch;
-                skip_line = true;
-                state = kReady;
-            }
-        } else if (state == kDefineName) {
-            if (isGraphX(ch)) {
-                define_name += (char)ch;
-            } else if (ch < 0 || ch == '\r' || ch == '\n') {
-                next_ch = ch;
-                skip_line = true;
-                state = kReady;
-            } else {
-                define_value = "";
-                state = kExpectDefineValue;
-            }
-        } else if (state == kExpectDefineValue) {
-            if (isGraphX(ch)) {
-                define_value = String((char)ch);
-                state = kDefineValue;
-            } else if (ch < 0 || ch == '\r' || ch == '\n') {
-                next_ch = ch;
-                skip_line = true;
-                state = kReady;
-            }
-        } else if (state == kDefineValue) {
-            if (isGraphX(ch)) {
-                define_value += (char)ch;
-            } else {
-                String n = replaceString(define_name, define_names_, define_values_);
-                String v = replaceString(define_value, define_names_, define_values_);
-                define_names_.push_back(n);
-                define_values_.push_back(v);
-                next_ch = ch;
-                skip_line = true;
-                state = kReady;
-            }
         } else if (state == kExpectHeaderName) {
-            if (isGraphX(ch)) {
-                header_name = String((char)ch);
+            if (ch < 0) {
+                state = kReady;
+            } else if (isGraphX(ch)) {
                 state = kHeaderName;
+                header_name = String((char)ch);
             }
         } else if (state == kHeaderName) {
-            if (ch == '>') {
-                handler->startHeader(header_name);
+            if (ch < 0) {
                 state = kReady;
             } else if (ch == '<') {
-                header_name = "";
                 state = kExpectHeaderName;
+            } else if (ch == '>') {
+                header_name.trim();
+                handler->startHeader(header_name);
+                state = kReady;
             } else if (isGraphX(ch)) {
                 header_name += (char)ch;
             }
         } else if (state == kOpcode) {
-            if (isWhitespace(ch)) {
+            if (ch < 0) {
+                state = kReady;
+            } else if (ch == '<') {
+                state = kExpectHeaderName;
+            } else if (ch == '=') {
+                state = kWaitValue;
+            } else if (isWhitespace(ch)) {
                 state = kWaitEqual;
+            } else if (isGraphX(ch)) {
+                opcode_name += (char)ch;
+            }
+        } else if (state == kWaitEqual) {
+            if (ch < 0) {
+                state = kReady;
+            } else if (ch == '<') {
+                state = kExpectHeaderName;
             } else if (ch == '=') {
                 state = kWaitValue;
             } else if (isGraphX(ch)) {
-                opcode += (char)ch;
-            }
-        } else if (state == kWaitEqual) {
-            if (isGraphX(ch)) {
-                if (ch == '=') {
-                    state = kWaitValue;
-                } else {
-                    next_ch = ch;
-                    state = kReady;
-                }
+                state = kReady;
+                next_ch = ch;
             }
         } else if (state == kWaitValue) {
-            if (isGraphX(ch)) {
-                value = String((char)ch);
+            if (ch < 0) {
+                state = kReady;
+            } else if (ch == '<') {
+                state = kExpectHeaderName;
+            } else if (isGraphX(ch)) {
+                state = kValue;
+                value_str = String((char)ch);
                 value_tokens = 1;
                 value_last_token_pos = 0;
-                state = kValue;
             }
         } else if (state == kValue) {
-            if (ch == '=') {
-                if (value_tokens >= 2) {
-                    String next_opcode = value.substring(value_last_token_pos);
-                    next_opcode.trim();
-                    value = value.substring(0, value_last_token_pos - 1);
-                    value.trim();
-                    String o = replaceString(opcode, define_names_, define_values_);
-                    String v = replaceString(value, define_names_, define_values_);
+            if (ch < 0 || ch == '\r' || ch == '\n' || ch == '<') {
+                value_str.trim();
+                String o = replaceString(opcode_name, define_names_, define_values_);
+                String v = replaceString(value_str, define_names_, define_values_);
+                if (o != "" && v != "") {
                     handler->opcode(o, v);
-                    opcode = next_opcode;
+                }
+                state = kReady;
+                next_ch = ch;
+            } else if (ch == '#') {
+                if (isSpace(prev_ch)) {
+                    value_str.trim();
+                    String o = replaceString(opcode_name, define_names_, define_values_);
+                    String v = replaceString(value_str, define_names_, define_values_);
+                    if (o != "" && v != "") {
+                        handler->opcode(o, v);
+                    }
+                    state = kReady;
+                    next_ch = ch;
+                } else {
+                    value_str += (char)ch;
+                    if (prev_ch == ' ' && ch != ' ') {
+                        value_tokens++;
+                        value_last_token_pos = value_str.length() - 1;
+                    }
+                }
+            } else if (ch == '=') {
+                if (value_tokens >= 2) {
+                    String next_opcode = value_str.substring(value_last_token_pos);
+                    next_opcode.trim();
+                    value_str = value_str.substring(0, value_last_token_pos);
+                    value_str.trim();
+                    String o = replaceString(opcode_name, define_names_, define_values_);
+                    String v = replaceString(value_str, define_names_, define_values_);
+                    handler->opcode(o, v);
+                    opcode_name = next_opcode;
                     state = kWaitValue;
                 } else {
-                    value += (char)ch;
+                    value_str += (char)ch;
                 }
-            } else if (ch == '<') {
-                value.trim();
-                String o = replaceString(opcode, define_names_, define_values_);
-                String v = replaceString(value, define_names_, define_values_);
-                handler->opcode(o, v);
-                if (header_name != "") {
-                    handler->endHeader(header_name);
-                }
-                header_name = "";
-                state = kExpectHeaderName;
-            } else if (ch < 0 || ch == '\r' || ch == '\n') {
-                value.trim();
-                String o = replaceString(opcode, define_names_, define_values_);
-                String v = replaceString(value, define_names_, define_values_);
-                handler->opcode(o, v);
-                state = kReady;
-            } else if (isGraphX(ch)) {
-                value += (char)ch;
+            } else if (ch == ' ' || isGraphX(ch)) {
+                value_str += (char)ch;
                 if (prev_ch == ' ' && ch != ' ') {
                     value_tokens++;
-                    value_last_token_pos = value.length() - 1;
+                    value_last_token_pos = value_str.length() - 1;
                 }
-            } else if (ch == ' ') {
-                value += (char)ch;
             }
         }
         prev_ch = ch;

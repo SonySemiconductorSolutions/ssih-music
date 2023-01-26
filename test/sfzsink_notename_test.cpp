@@ -23,19 +23,20 @@ void create_file(const String &file_path, const String &text) {
 
 class SfzTest : public ::testing::Test {
 public:
-    int getSfzDataNum(const SFZSink &sfz_test) {
+    int getSfzDataNum(SFZSink &sfz_test) {
         return sfz_test.regions_.size();
     }
-    int getSfzDataSwlokey(const SFZSink &sfz_test) {
+    int getSfzDataSwlokey(SFZSink &sfz_test) {
         return sfz_test.sw_lokey_;
     }
-    int getSfzDataSwhikey(const SFZSink &sfz_test) {
+    int getSfzDataSwhikey(SFZSink &sfz_test) {
         return sfz_test.sw_hikey_;
     }
-    int getSfzDataSwkey(const SFZSink &sfz_test) {
+    int getSfzDataSwkey(SFZSink &sfz_test) {
         return sfz_test.sw_last_;
     }
-    std::vector<SFZSink::Region> getSfzData(const SFZSink &sfz_test) {
+    std::vector<SFZSink::Region> getSfzData(SFZSink &sfz_test) {
+        sfz_test.begin();
         return sfz_test.regions_;
     }
 

@@ -12,6 +12,7 @@
 #include <pthread.h>
 
 #include <Arduino.h>
+
 #include <Audio.h>
 #include <OutputMixer.h>
 #include <MemoryUtil.h>

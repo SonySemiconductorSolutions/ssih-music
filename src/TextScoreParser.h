@@ -13,7 +13,6 @@
 
 #include <File.h>
 
-#include "BufferedFileReader.h"
 #include "ScoreParser.h"
 
 class TextScoreParser : public ScoreParser {
@@ -51,7 +50,6 @@ public:
 private:
     std::vector<Music> musics_;
     File file_;
-    BufferedFileReader reader_;
     bool is_end_of_music_;
     int tempo_;
     int tone_;

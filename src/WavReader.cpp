@@ -29,15 +29,15 @@ const int kSampleFrq = 48000;
 const int kBitDepth = 16;
 const int kChannelCount = 2;
 
-uint32_t swap32(uint32_t v) {
+static uint32_t swap32(uint32_t v) {
     return (((v >> 0) & 0xFF) << 24) | (((v >> 8) & 0xFF) << 16) | (((v >> 16) & 0xFF) << 8) | (((v >> 24) & 0xFF) << 0);
 }
 
-uint16_t swap16(uint16_t v) {
+static uint16_t swap16(uint16_t v) {
     return (((v >> 0) & 0xFF) << 8) | (((v >> 8) & 0xFF) << 0);
 }
 
-uint32_t getByte32LE(File& file) {
+static uint32_t getByte32LE(File& file) {
     uint32_t ret = 0;
     for (unsigned int i = 0; i < sizeof(ret); i++) {
         ret = ret << 8;
@@ -47,7 +47,7 @@ uint32_t getByte32LE(File& file) {
     return ret;
 }
 
-uint16_t getByte16LE(File& file) {
+static uint16_t getByte16LE(File& file) {
     uint16_t ret = 0;
     for (unsigned int i = 0; i < sizeof(ret); i++) {
         ret = ret << 8;
@@ -209,7 +209,7 @@ bool WavReader::parseWaveHeader(File& file, WaveHeader* waveh) {
     waveh->bits_per_sample = getByte16LE(file);
     debug_printf("[%s::%s] @ Bits per sample  = %d\n\n", kClassName, __func__, waveh->bits_per_sample);
 
-    //サブチャンクのその他のデータは必要ないため排除
+    // Eliminate other data in the subchunk because it is not needed
     if (16 < waveh->data_len) {
         file.seek(file.position() + (waveh->data_len - 16));
     }

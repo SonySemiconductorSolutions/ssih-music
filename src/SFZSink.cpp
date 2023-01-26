@@ -414,8 +414,8 @@ void SFZSink::startSfz() {
         global_.silence = false;
         global_.specified = 0;
         global_.opcode[kOpcodeSample] = 0;
-        global_.opcode[kOpcodeLochan] = 0;
-        global_.opcode[kOpcodeHichan] = 15;
+        global_.opcode[kOpcodeLochan] = 1;
+        global_.opcode[kOpcodeHichan] = 16;
         global_.opcode[kOpcodeLokey] = NOTE_NUMBER_MIN;
         global_.opcode[kOpcodeHikey] = NOTE_NUMBER_MAX;
         global_.opcode[kOpcodeLovel] = 0;
@@ -507,8 +507,8 @@ void SFZSink::opcode(const String& opcode, const String& value) {
     const  OpcodeSpec opcode_spec[] = {
     //   opcode_str      opcode_enum         min              max              parser
         {"sample",       kOpcodeSample,      0,               0,               nullptr      },
-        {"lochan",       kOpcodeLochan,      0,               15,              parseUint32  },
-        {"hichan",       kOpcodeHichan,      0,               15,              parseUint32  },
+        {"lochan",       kOpcodeLochan,      1,               16,              parseUint32  },
+        {"hichan",       kOpcodeHichan,      1,               16,              parseUint32  },
         {"hikey",        kOpcodeHikey,       NOTE_NUMBER_MIN, NOTE_NUMBER_MAX, parseNotename},
         {"lokey",        kOpcodeLokey,       NOTE_NUMBER_MIN, NOTE_NUMBER_MAX, parseNotename},
         {"key",          kOpcodeHikey,       NOTE_NUMBER_MIN, NOTE_NUMBER_MAX, parseNotename},

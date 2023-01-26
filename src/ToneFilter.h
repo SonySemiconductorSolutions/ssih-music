@@ -44,25 +44,19 @@ public:
     };
 
     ToneFilter(Filter& filter);
-
     ToneFilter(int new_tone, Filter& filter);
 
+    int getTone();
     void setTone(int new_tone);
 
-    int getTone();
-
     bool isAvailable(int param_id) override;
-
     intptr_t getParam(int param_id) override;
-
     bool setParam(int param_id, intptr_t value) override;
 
     bool sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) override;
 
 private:
     int tone_;  //< value of MusicKey
-
-    uint8_t tone2Note(uint8_t note);
 };
 
 #endif  // TONE_FILTER_H_
