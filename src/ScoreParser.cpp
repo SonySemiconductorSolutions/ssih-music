@@ -4,6 +4,8 @@
  * Copyright 2022 Sony Semiconductor Solutions Corporation
  */
 
+#if defined(ARDUINO_ARCH_SPRESENSE) && !defined(SUBCORE)
+
 #include "ScoreParser.h"
 
 // #define DEBUG (1)
@@ -52,3 +54,5 @@ bool ScoreParser::setPlayTrack(uint32_t mask) {
 uint32_t ScoreParser::getPlayTrack() {
     return play_track_flags_;
 }
+
+#endif  // ARDUINO_ARCH_SPRESENSE
