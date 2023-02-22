@@ -190,49 +190,66 @@ bool SDSink::setParam(int param_id, intptr_t value) {
 }
 
 bool SDSink::sendNoteOff(uint8_t note, uint8_t velocity, uint8_t channel) {
-    if (note < sizeof(units_) / sizeof(units_[0])) {
-        if (units_[note].render_ch >= 0) {
-            renderer_.deallocateChannel(units_[note].render_ch);
+    if (sizeof(units_) / sizeof(units_[0]) <= note) {
+        error_printf("[%s::%s] out of note number\n", kClassName, __func__);
+        return false;
+    }
+
+    if (units_[note].path.length() == 0) {
+        error_printf("[%s::%s] undefined note number\n", kClassName, __func__);
+        return false;
+    }
+
+    if (units_[note].render_ch >= 0) {
+        renderer_.deallocateChannel(units_[note].render_ch);
+        units_[note].render_ch = kDeallocatedChannel;
+        units_[note].file.close();
+    } else if (units_[note].render_ch == kUnallocatedChannel) {
+        if (units_[note].file) {
             units_[note].render_ch = kDeallocatedChannel;
             units_[note].file.close();
-        } else if (units_[note].render_ch == kUnallocatedChannel) {
-            if (units_[note].file) {
-                units_[note].render_ch = kDeallocatedChannel;
-                units_[note].file.close();
-            }
         }
     }
     return true;
 }
 
 bool SDSink::sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) {
+    debug_printf("[%s::%s] note:%d\n", kClassName, __func__, note);
+    if (sizeof(units_) / sizeof(units_[0]) <= note) {
+        error_printf("[%s::%s] out of note number\n", kClassName, __func__);
+        return false;
+    }
+
+    if (units_[note].path.length() == 0) {
+        error_printf("[%s::%s] undefined note number\n", kClassName, __func__);
+        return false;
+    }
+
     if (velocity == 0) {
         return sendNoteOff(note, velocity, channel);
     }
-    if (note < sizeof(units_) / sizeof(units_[0])) {
-        if (units_[note].render_ch >= 0) {
-            renderer_.deallocateChannel(units_[note].render_ch);
-            units_[note].render_ch = kDeallocatedChannel;
-            units_[note].file.close();
-        } else if (units_[note].render_ch == kUnallocatedChannel) {
-            units_[note].render_ch = kDeallocatedChannel;
-            units_[note].file.close();
-        }
 
-        units_[note].file = File(units_[note].path.c_str());
-        if (units_[note].file) {
-            units_[note].file.seek(units_[note].offset + msToByte(offset_));
-            int render_channel = renderer_.allocateChannel();
-            units_[note].render_ch = (render_channel < 0) ? kUnallocatedChannel : render_channel;
-            if (units_[note].render_ch == kUnallocatedChannel) {
-                error_printf("[%s::%s] cannot allocate channel\n", kClassName, __func__);
-            } else {
-                update();
-            }
-        }
-        return true;
+    if (units_[note].render_ch >= 0) {
+        renderer_.deallocateChannel(units_[note].render_ch);
+        units_[note].render_ch = kDeallocatedChannel;
+        units_[note].file.close();
+    } else if (units_[note].render_ch == kUnallocatedChannel) {
+        units_[note].render_ch = kDeallocatedChannel;
+        units_[note].file.close();
     }
-    return false;
+
+    units_[note].file = File(units_[note].path.c_str());
+    if (units_[note].file) {
+        units_[note].file.seek(units_[note].offset + msToByte(offset_));
+        int render_channel = renderer_.allocateChannel();
+        units_[note].render_ch = (render_channel < 0) ? kUnallocatedChannel : render_channel;
+        if (units_[note].render_ch == kUnallocatedChannel) {
+            error_printf("[%s::%s] cannot allocate channel\n", kClassName, __func__);
+        } else {
+            update();
+        }
+    }
+    return true;
 }
 
 #endif  // ARDUINO_ARCH_SPRESENSE

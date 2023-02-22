@@ -13,6 +13,8 @@
 
 #include <SDSink.h>
 
+#include "Button.h"
+
 // this file names are deifned middle C (60) as C4
 const SDSink::Item table[12] = {
     {60, "SawLpf/60_C4.wav"},   // C4
@@ -30,11 +32,9 @@ const SDSink::Item table[12] = {
 };
 SDSink inst(table, 12);
 
-int selector = 0;
-
-int button4 = HIGH;
-int button5 = HIGH;
-int button6 = HIGH;
+Button button4(PIN_D04);
+Button button5(PIN_D05);
+Button button6(PIN_D06);
 
 void setup() {
     // init built-in I/O
@@ -43,11 +43,6 @@ void setup() {
     pinMode(LED1, OUTPUT);
     pinMode(LED2, OUTPUT);
     pinMode(LED3, OUTPUT);
-
-    // init buttons
-    pinMode(PIN_D04, INPUT_PULLUP);
-    pinMode(PIN_D05, INPUT_PULLUP);
-    pinMode(PIN_D06, INPUT_PULLUP);
 
     // setup instrument
     if (!inst.begin()) {
@@ -63,35 +58,29 @@ void setup() {
 int note1 = INVALID_NOTE_NUMBER;
 int note2 = INVALID_NOTE_NUMBER;
 
+int selector = 0;
+
 void loop() {
-    int button4_input = digitalRead(PIN_D04);
-    if (button4_input != button4) {
-        if (button4_input == LOW) {
+    if (button4.hasChanged()) {
+        if (button4.isPressed()) {
             note1 = 60 + (selector * 2);
             inst.sendNoteOn(note1, DEFAULT_VELOCITY, DEFAULT_CHANNEL);
         } else {
             inst.sendNoteOff(note1, DEFAULT_VELOCITY, DEFAULT_CHANNEL);
         }
-        button4 = button4_input;
     }
 
-    int button5_input = digitalRead(PIN_D05);
-    if (button5_input != button5) {
-        if (button5_input == LOW) {
+    if (button5.hasChanged()) {
+        if (button5.isPressed()) {
             note2 = 61 + (selector * 2);
             inst.sendNoteOn(note2, DEFAULT_VELOCITY, DEFAULT_CHANNEL);
         } else {
             inst.sendNoteOff(note2, DEFAULT_VELOCITY, DEFAULT_CHANNEL);
         }
-        button5 = button5_input;
     }
 
-    int button6_input = digitalRead(PIN_D06);
-    if (button6_input != button6) {
-        if (button6_input == LOW) {
-            selector = (selector + 1) % 6;
-        }
-        button6 = button6_input;
+    if (button6.hasChanged() && button6.isPressed()) {
+        selector = (selector + 1) % 6;
     }
 
     // run instrument

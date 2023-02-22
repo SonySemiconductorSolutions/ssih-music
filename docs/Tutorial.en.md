@@ -99,7 +99,7 @@ Follow these steps to write a SimpleHorn that sounds the same pitch as your voic
 ssprocLib provides several instrument software samples.
 
 * a musical instrument played with buttons
-    * ButtonDrum
+    * [ButtonDrum](/examples/ButtonDrum/README.md)
         * This instrument makes a corresponding sound when a button is pressed. Use button 4 ~ 6 on the LCD board.
             * ![LCD KIT Board Image](/docs/Sample_LCD.png)
             * Button Behavior
@@ -107,7 +107,7 @@ ssprocLib provides several instrument software samples.
                 * Button 5: Play Sound Source 2
                 * Button 6: Switch the sound source
                 * Button 7: Don't use
-    * OneKeySynth
+    * [OneKeySynth](/examples/OneKeySynth/README.md)
         * It is a musical instrument that plays according to the score file when you press the button. Use button 4 ~ 5 on the LCD board.
             * Button Behavior
                 * Button 4: Play the sound source according to the score file
@@ -115,9 +115,9 @@ ssprocLib provides several instrument software samples.
                 * Button 6: Don't use
                 * Button 7: Don't use
 * a musical instrument played with a microphone
-    * SimpleHorn
+    * [SimpleHorn](/examples/SimpleHorn/README.md)
         * It is an instrument that produces a sound as high as the humming of the performer. It uses a microphone and a microphone board.
-    * YuruHorn
+    * [YuruHorn](/examples/YuruHorn/README.md)
         * It is an instrument that produces a sound as high as the humming of the performer. It uses a microphone and a microphone board.
         * You can control the playback of sound source files using the [SFZ Format](http://sfzformat.com/legacy/).
         * For example, looped playback allows you to play longer than an instrument file.
@@ -220,26 +220,30 @@ Take a look at the sample sketch ButtonDrum to see how it sounds.
             inst.begin();
         }
         
-        int selector = 0;
-        int note = 60 + (selector * 2);
+        Button button4(PIN_D04);
+        Button button5(PIN_D05);
+        Button button6(PIN_D06);
+        
+        int note1 = INVALID_NOTE_NUMBER;
+        int note2 = INVALID_NOTE_NUMBER;
 
+        int selector = 0;
+        
         void loop() {
             //Button4
-            int button4_input = digitalRead(PIN_D04);
-            if (button4_input != button4) {
-                if (button4_input == LOW) {
-                    //When the button is pressed, select the sound to be played and play it
-                    note = 60 + (selector * 2);
-                    inst.sendNoteOn(note, DEFAULT_VELOCITY, DEFAULT_CHANNEL);
+            if (button4.hasChanged()) {
+                if (button4.isPressed()) {
+                    note1 = 60 + (selector * 2);
+                    inst.sendNoteOn(note1, DEFAULT_VELOCITY, DEFAULT_CHANNEL);
                 } else {
-                    //When the button is released, stop the ringing sound
-                    inst.sendNoteOff(note, DEFAULT_VELOCITY, DEFAULT_CHANNEL);
+                    inst.sendNoteOff(note1, DEFAULT_VELOCITY, DEFAULT_CHANNEL);
                 }
-                button4 = button4_input;
             }
+        
             //Button5 (omitted)
+        
             //Button6 (omitted)
-            
+        
             inst.update();
         }
         ```
@@ -275,10 +279,10 @@ Let's use ssprocLib, which provides a module called `YuruhornSrc` that converts 
             {71, "SawLpf/71_B4.wav"},
             {72, "SawLpf/72_C5.wav"}
         };
-
+        
         // 2. Register a correspondence table with SDSink
         SDSink sink(table, 25);
-
+        
         // 3. Register SDSink as next module for YuruhornSrc
         YuruhornSrc inst(sink);
         ```
@@ -355,11 +359,11 @@ Let's take a look at how to write SFZ files simply.
         SFZSink sink("yuruhorn.sfz");   //name a file for SFZSink instead of a corresponding table for SDSink
         OctaveShift filter(sink);       //Register SFZSink as the next module of OctaveShift
         YuruhornSrc inst(filter);       //Register OctaveShift as the next module in YuruhornSrc
-
+        
         void setup() {
             inst.begin();
         }
-
+        
         void loop() {
             inst.update();
         }

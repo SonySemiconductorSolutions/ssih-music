@@ -54,5 +54,4 @@ bool ScoreParser::setPlayTrack(uint32_t mask) {
 uint32_t ScoreParser::getPlayTrack() {
     return play_track_flags_;
 }
-
-#endif  // ARDUINO_ARCH_SPRESENSE
+#endif

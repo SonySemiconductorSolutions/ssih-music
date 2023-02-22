@@ -45,11 +45,11 @@ public:
 
     bool sendNoteOff(uint8_t note, uint8_t velocity, uint8_t channel) override;
     bool sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) override;
-    virtual bool sendSongPositionPointer(uint16_t beats);
-    virtual bool sendSongSelect(uint8_t song);
-    virtual bool sendStart();
-    virtual bool sendContinue();
-    virtual bool sendStop();
+    bool sendSongPositionPointer(uint16_t beats) override;
+    bool sendSongSelect(uint8_t song) override;
+    bool sendContinue() override;
+    bool sendStop() override;
+    virtual bool sendMtcFullMessage(uint8_t hr, uint8_t mn, uint8_t sc, uint8_t fr);
     bool sendMidiMessage(uint8_t* msg, size_t length) override;
 
     bool isParserAvailable();
@@ -63,6 +63,7 @@ protected:
 
 private:
     String file_name_;
+    String score_name_;
     ScoreParser* parser_;
     int score_index_;
     uint16_t root_tick_;

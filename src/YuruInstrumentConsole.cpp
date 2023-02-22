@@ -16,7 +16,7 @@
 #include "YuruInstrumentConfig.h"
 #include "YuruInstrumentFilter.h"
 
-//#define DEBUG (1)
+// #define DEBUG (1)
 
 // clang-format off
 #define nop(...) do {} while (0)
@@ -359,6 +359,27 @@ static int CommandSendNoteOn(YuruInstrumentConsole *console, int argc, char *arg
     return -YuruInstrumentConfig::kErrInval;
 }
 
+static int CommandSendMidiMessage(YuruInstrumentConsole *console, int argc, char *argv[]) {
+    if (console == nullptr) {
+        return -YuruInstrumentConfig::kErrInval;
+    }
+    Filter *filter = console->getFilter();
+    uint8_t msg[16];
+    size_t msg_length = sizeof(msg);
+    memset(msg, 0x00, sizeof(msg));
+    if ((argc - 1) < (int)msg_length) {
+        msg_length = argc - 1;
+    }
+    for (size_t i = 0; i < msg_length; i++) {
+        msg[i] = strtoul(argv[i + 1], nullptr, 0);
+    }
+    if (filter) {
+        filter->sendMidiMessage(msg, msg_length);
+        return YuruInstrumentConfig::kNoError;
+    }
+    return -YuruInstrumentConfig::kErrInval;
+}
+
 static int CommandHelp(YuruInstrumentConsole *console, int argc, char *argv[]);
 
 // clang-format off
@@ -378,6 +399,7 @@ static const CommandSpec g_command_spec[] = {
     {"set",                CommandSetParam          },
     {"noteOff",            CommandSendNoteOff       },
     {"noteOn",             CommandSendNoteOn        },
+    {"send",               CommandSendMidiMessage   },
     {"help",               CommandHelp              },
     {"?",                  CommandHelp              }};
 // clang-format on
@@ -441,7 +463,7 @@ static int ExecuteCommand(YuruInstrumentConsole *console, int argc, char *argv[]
 }
 
 void YuruInstrumentConsole::execute(char *line, int length) {
-    const int kMaxTokenNum = 4;
+    const int kMaxTokenNum = 20;
     struct TokenRange {
         int begin;
         int end;

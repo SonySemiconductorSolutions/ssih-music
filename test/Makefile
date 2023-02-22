@@ -15,6 +15,7 @@ GCOVFLAGS = --branch-probabilities --branch-counts
 
 ALL_OBJECTS = ../src/BaseFilter.o \
               ../src/CorrectToneFilter.o \
+              ../src/midi_util.o \
               ../src/NullFilter.o \
               ../src/OctaveShift.o \
               ../src/OneKeySynthesizerFilter.o \

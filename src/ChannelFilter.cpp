@@ -10,7 +10,7 @@
 
 #include <Arduino.h>
 
-//#define DEBUG (1)
+// #define DEBUG (1)
 
 // clang-format off
 #define nop(...) do {} while (0)
@@ -98,6 +98,7 @@ bool ChannelFilter::sendNoteOff(uint8_t note, uint8_t velocity, uint8_t channel)
             return BaseFilter::sendNoteOff(note, velocity, channel);
         }
     }
+    return false;
 }
 
 bool ChannelFilter::sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) {
@@ -107,6 +108,7 @@ bool ChannelFilter::sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) 
             return BaseFilter::sendNoteOn(note, velocity, channel);
         }
     }
+    return false;
 }
 
 #endif  // ARDUINO_ARCH_SPRESENSE

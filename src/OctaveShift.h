@@ -26,6 +26,7 @@ public:
     bool setParam(int param_id, intptr_t value) override;
 
     bool sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) override;
+    bool sendNoteOff(uint8_t note, uint8_t velocity, uint8_t channel) override;
 
 private:
     int shift_;

@@ -32,19 +32,13 @@ static const int kDefaultTempo = (int)60000000 / 120;
 
 static CorrectToneFilter::Note kInvalidNote = {INVALID_NOTE_NUMBER, 0};
 
-CorrectToneFilter::CorrectToneFilter(const String& file_name, Filter& filter) : CorrectToneFilter(file_name, false, filter) {
-}
-
-CorrectToneFilter::CorrectToneFilter(const String& file_name, bool auto_start, Filter& filter)
+CorrectToneFilter::CorrectToneFilter(const String& file_name, Filter& filter)
     : ScoreFilter(file_name, filter),
-      current_tempo_(kDefaultTempo),
-      duration_(0),
-      schedule_time_(0),
-      total_delta_time_(0),
-      default_state_(auto_start ? ScoreFilter::PLAY : ScoreFilter::PAUSE),
+      time_keeper_(),
+      default_state_(ScoreFilter::PAUSE),
       play_state_(default_state_),
       next_state_(default_state_),
-      is_event_available(false),
+      is_event_available_(false),
       is_music_start_(true),
       midi_message_(),
       assigned_notes_(),
@@ -172,12 +166,9 @@ bool CorrectToneFilter::sendNoteOn(uint8_t note, uint8_t velocity, uint8_t chann
 
 bool CorrectToneFilter::setScoreIndex(int id) {
     if (ScoreFilter::setScoreIndex(id)) {
-        current_tempo_ = kDefaultTempo;
-        duration_ = 0;
-        schedule_time_ = 0;
-        total_delta_time_ = 0;
+        time_keeper_.reset(getRootTick(), kDefaultTempo);
         play_state_ = default_state_;
-        is_event_available = false;
+        is_event_available_ = false;
         is_music_start_ = true;
         memset(&midi_message_, 0x00, sizeof(midi_message_));
         for (uint8_t channel = 1; channel <= 16; channel++) {
@@ -204,37 +195,33 @@ bool CorrectToneFilter::updateNotes() {
     if (play_state_ == ScoreFilter::END) {
         return false;
     }
+
+    time_keeper_.setCurrentTime();
     if (is_music_start_) {
-        schedule_time_ = millis();
+        time_keeper_.startSmfTimer();
         is_music_start_ = false;
     }
 
-    if (!is_event_available) {
-        unsigned long prev_total_delta_time = total_delta_time_;
+    if (!is_event_available_) {
         getMidiMessage(&midi_message_);
-        total_delta_time_ += midi_message_.delta_time;
         debug_printf("[%s::%s] delta_time:%d, ", kClassName, __func__, midi_message_.delta_time);
         debug_printf("status_byte:%02x, data_byte1:%02x, data_byte2:%02x, ", midi_message_.status_byte, midi_message_.data_byte1, midi_message_.data_byte2);
         debug_printf("event_code:%02x, event_length:%02x\n", midi_message_.event_code, midi_message_.event_length);
 
-        uint16_t root_tick = getRootTick();
-        if (root_tick != 0) {
-            schedule_time_ += (unsigned long)(((current_tempo_ / root_tick) * total_delta_time_) / 1000) -
-                              (unsigned long)(((current_tempo_ / root_tick) * prev_total_delta_time) / 1000);
-        }
-        is_event_available = true;
+        time_keeper_.setScheduleTime(midi_message_.delta_time);
+        is_event_available_ = true;
     }
     if (play_state_ != next_state_) {
         trace_printf("[%s::%s] old stat:%d, now stat:%d\n", kClassName, __func__, play_state_, next_state_);
         if (next_state_ == ScoreFilter::PAUSE) {
             // hold remaining time
-            duration_ = schedule_time_ - millis();
+            time_keeper_.stopSmfTimer();
         } else if (next_state_ == ScoreFilter::PLAY) {
             // re-calculate schedule time
-            schedule_time_ = millis() + duration_;
+            time_keeper_.continueSmfTimer();
         }
         play_state_ = next_state_;
-    } else if (schedule_time_ <= millis() && play_state_ == PLAY) {
+    } else if (time_keeper_.isScheduledTime() && play_state_ == PLAY) {
         uint8_t status_byte = midi_message_.status_byte;
         if ((status_byte & 0xF0) == MIDI_MSG_NOTE_ON && midi_message_.data_byte2 == 0) {
             status_byte = MIDI_MSG_NOTE_OFF | (status_byte & 0x0F);
@@ -262,8 +249,7 @@ bool CorrectToneFilter::updateNotes() {
                 for (uint32_t i = 0; i < midi_message_.event_length; i++) {
                     tempo = (tempo << 8) | midi_message_.sysex_array[i];
                 }
-                current_tempo_ = tempo & 0x00FFFFFF;
-                debug_printf("[%s::%s] current_tempo_:%d\n", kClassName, __func__, current_tempo_);
+                time_keeper_.setTempo(tempo & 0x00FFFFFF);
             } else if (midi_message_.event_code == MIDI_META_END_OF_TRACK) {
                 play_state_ = ScoreFilter::END;
             } else {
@@ -273,7 +259,7 @@ bool CorrectToneFilter::updateNotes() {
             debug_printf("[%s::%s] This is unused Midi event.\n", kClassName, __func__);
         }
         memset(&midi_message_, 0x00, sizeof(midi_message_));
-        is_event_available = false;
+        is_event_available_ = false;
     }
     return true;
 }

@@ -144,6 +144,7 @@ size_t HardwareSerial::write(const uint8_t *buf, size_t len) {
 }
 
 HardwareSerial Serial = HardwareSerial();
+HardwareSerial Serial2 = HardwareSerial();
 
 //// Print.h
 
@@ -322,42 +323,51 @@ String::String(char val) : buffer_(nullptr), capacity_(0), len_(0) {
 
 String::String(unsigned char val, unsigned char base) : buffer_(nullptr), capacity_(0), len_(0) {
     char buf[32];
+    memset(buf, 0x00, sizeof(buf));
     itos((unsigned int)val, base, buf);
     *this = buf;
 }
 
 String::String(int val, unsigned char base) : buffer_(nullptr), capacity_(0), len_(0) {
     char buf[32];
+    memset(buf, 0x00, sizeof(buf));
     itos((unsigned int)val, base, buf);
     *this = buf;
 }
 
 String::String(unsigned int val, unsigned char base) : buffer_(nullptr), capacity_(0), len_(0) {
     char buf[32];
+    memset(buf, 0x00, sizeof(buf));
     itos((unsigned int)val, base, buf);
     *this = buf;
 }
 
 String::String(long val, unsigned char base) : buffer_(nullptr), capacity_(0), len_(0) {
     char buf[32];
+    memset(buf, 0x00, sizeof(buf));
     itos((unsigned int)val, base, buf);
     *this = buf;
 }
 
 String::String(unsigned long val, unsigned char base) : buffer_(nullptr), capacity_(0), len_(0) {
     char buf[32];
+    memset(buf, 0x00, sizeof(buf));
     itos((unsigned int)val, base, buf);
     *this = buf;
 }
 
 String::String(float val, unsigned char decimalPlaces) : buffer_(nullptr), capacity_(0), len_(0) {
     char buf[32];
-    *this = ftos(val, 2 + decimalPlaces, decimalPlaces, buf);
+    memset(buf, 0x00, sizeof(buf));
+    ftos(val, 2 + decimalPlaces, decimalPlaces, buf);
+    *this = buf;
 }
 
 String::String(double val, unsigned char decimalPlaces) : buffer_(nullptr), capacity_(0), len_(0) {
     char buf[32];
-    *this = ftos(val, 2 + decimalPlaces, decimalPlaces, buf);
+    memset(buf, 0x00, sizeof(buf));
+    ftos(val, 2 + decimalPlaces, decimalPlaces, buf);
+    *this = buf;
 }
 
 String &String::operator=(const String &rhs) {
@@ -371,12 +381,14 @@ String &String::operator=(const String &rhs) {
 
 String &String::operator=(const char *rhs) {
     unsigned int len = 0;
-    if (rhs) {
+    if (rhs == nullptr) {
+        len_ = 0;
+    } else {
         len = strlen(rhs);
+        reserve(len);
+        strcpy(buffer_, rhs);
+        len_ = len;
     }
-    reserve(len);
-    strcpy(buffer_, rhs);
-    len_ = len;
     return *this;
 }
 
@@ -553,10 +565,9 @@ void String::remove(unsigned int index, unsigned int count) {
     if (count > len_ - index) {
         count = len_ - index;
     }
-    char *pos = buffer_ + index;
-    strncpy(pos, buffer_ + index + count, len_ - index);
-    buffer_[len_] = 0;
-    len_ = len_ - count;
+    String s1 = substring(0, index);
+    String s2 = substring(index + count);
+    *this = s1 + s2;
 }
 
 void String::replace(char ch1, char ch2) {

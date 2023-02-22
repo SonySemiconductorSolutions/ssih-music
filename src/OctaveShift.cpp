@@ -10,13 +10,21 @@
 
 #include <Arduino.h>
 
-#ifdef DEBUG
-#define debugPrintf printf
-#else   // DEBUG
+// #define DEBUG (1)
 // clang-format off
-#define debugPrintf(...) do {} while (0)
+#define nop(...) do {} while (0)
 // clang-format on
+#ifdef DEBUG
+#define trace_printf nop
+#define debug_printf printf
+#define error_printf printf
+#else  // DEBUG
+#define trace_printf nop
+#define debug_printf nop
+#define error_printf printf
 #endif  // DEBUG
+
+static const char kClassName[] = "OctaveShift";
 
 OctaveShift::OctaveShift(Filter& filter) : BaseFilter(filter), shift_(0) {
 }
@@ -56,6 +64,10 @@ bool OctaveShift::setParam(int param_id, intptr_t value) {
 
 bool OctaveShift::sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) {
     return BaseFilter::sendNoteOn(constrain(note + (PITCH_NUM * shift_), NOTE_NUMBER_MIN, NOTE_NUMBER_MAX), velocity, channel);
+}
+
+bool OctaveShift::sendNoteOff(uint8_t note, uint8_t velocity, uint8_t channel) {
+    return BaseFilter::sendNoteOff(constrain(note + (PITCH_NUM * shift_), NOTE_NUMBER_MIN, NOTE_NUMBER_MAX), velocity, channel);
 }
 
 #endif  // ARDUINO_ARCH_SPRESENSE

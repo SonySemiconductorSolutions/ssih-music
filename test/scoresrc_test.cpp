@@ -4,26 +4,11 @@
  * Copyright 2022 Sony Semiconductor Solutions Corporation
  */
 
-//#include <gtest/gtest.h>
+#include <gtest/gtest.h>
 
 #include "midi_util.h"
 #include "SmfParser.h"
 #include "TextScoreParser.h"
-
-//#define DEBUG (1)
-
-// clang-format off
-#define nop(...) do {} while (0)
-// clang-format on
-#ifdef DEBUG
-#define trace_printf nop
-#define debug_printf printf
-#define error_printf printf
-#else  // DEBUG
-#define trace_printf nop
-#define debug_printf nop
-#define error_printf printf
-#endif  // DEBUG
 
 enum ScoreFileType {
     kScoreFileTypeTxt = 0,
@@ -42,32 +27,32 @@ int getFileType(String& file_type) {
     }
 }
 
-void midiparse() {
+TEST(ScoreSrc, parse_smf) {
     String file_name = "testdata/BeethovenFurElise.mid";
     String file_type = file_name;
     int dot_position = file_type.lastIndexOf(".");
     if (dot_position < 0) {
-        error_printf("ScoreReader: SD: file:%s This file is not supported.\n", file_name.c_str());
+        printf("ScoreReader: SD: file:%s This file is not supported.\n", file_name.c_str());
         return;
     } else {
         file_type = file_type.substring(dot_position);
     }
-    debug_printf("File_name:%s\n", file_name.c_str());
-    debug_printf("ScoreReader: SD: file type:%s\n", file_type.c_str());
+    printf("File_name:%s\n", file_name.c_str());
+    printf("ScoreReader: SD: file type:%s\n", file_type.c_str());
 
     SmfParser parser(file_name);
 
     // MIDI header analysis
     if (getFileType(file_type) == kScoreFileTypeMidi) {
-        trace_printf("Midi\n");
+        printf("Midi\n");
         for (int i = 0; i < parser.getNumberOfScores(); i++) {
-            debug_printf("ScoreReader: File Name    :%s\n", parser.getFileName().c_str());
-            debug_printf("ScoreReader: Track        :%d\n", i);
-            debug_printf("ScoreReader: Title        :%s\n", parser.getTitle(i).c_str());
-            debug_printf("ScoreReader: Tick         :%d\n", parser.getRootTick());
+            printf("ScoreReader: File Name    :%s\n", parser.getFileName().c_str());
+            printf("ScoreReader: Track        :%d\n", i);
+            printf("ScoreReader: Title        :%s\n", parser.getTitle(i).c_str());
+            printf("ScoreReader: Tick         :%d\n", parser.getRootTick());
         }
     } else {
-        error_printf("ScoreReader: SD: file:%s This file is not supported.\n", file_name.c_str());
+        printf("ScoreReader: SD: file:%s This file is not supported.\n", file_name.c_str());
     }
 
     parser.loadScore(1);
@@ -96,32 +81,32 @@ void midiparse() {
     }
 }
 
-void textparse() {
+TEST(ScoreSrc, parse_txt) {
     String file_name = "testdata/Yukai_na_Makiba.txt";
     String file_type = file_name;
     int dot_position = file_type.lastIndexOf(".");
     if (dot_position < 0) {
-        error_printf("ScoreReader: SD: file:%s This file is not supported.\n", file_name.c_str());
+        printf("ScoreReader: SD: file:%s This file is not supported.\n", file_name.c_str());
         return;
     } else {
         file_type = file_type.substring(dot_position);
     }
-    debug_printf("File_name:%s\n", file_name.c_str());
-    debug_printf("ScoreReader: SD: file type:%s\n", file_type.c_str());
+    printf("File_name:%s\n", file_name.c_str());
+    printf("ScoreReader: SD: file type:%s\n", file_type.c_str());
 
     TextScoreParser parser(file_name);
 
     // MIDI header analysis
     if (getFileType(file_type) == kScoreFileTypeTxt) {
-        trace_printf("Midi\n");
+        printf("Midi\n");
         for (int i = 0; i < parser.getNumberOfScores(); i++) {
-            debug_printf("ScoreReader: File Name    :%s\n", parser.getFileName().c_str());
-            debug_printf("ScoreReader: Track        :%d\n", i);
-            debug_printf("ScoreReader: Title        :%s\n", parser.getTitle(i).c_str());
-            debug_printf("ScoreReader: Tick         :%d\n", parser.getRootTick());
+            printf("ScoreReader: File Name    :%s\n", parser.getFileName().c_str());
+            printf("ScoreReader: Track        :%d\n", i);
+            printf("ScoreReader: Title        :%s\n", parser.getTitle(i).c_str());
+            printf("ScoreReader: Tick         :%d\n", parser.getRootTick());
         }
     } else {
-        error_printf("ScoreReader: SD: file:%s This file is not supported.\n", file_name.c_str());
+        printf("ScoreReader: SD: file:%s This file is not supported.\n", file_name.c_str());
     }
 
     parser.loadScore(0);
@@ -148,10 +133,4 @@ void textparse() {
             printf("%d: delta_time:%d 0x%02X\n", i, msg.delta_time, msg.status_byte);
         }
     }
-}
-
-int main(void) {
-    midiparse();
-    textparse();
-    return 0;
 }

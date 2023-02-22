@@ -136,6 +136,66 @@ static bool parseInt32(const String& str, int32_t* out) {
     return false;
 }
 
+static bool parseQ16(const String& str, uint32_t* out) {
+    const char* strptr = str.c_str();
+    char* endptr = nullptr;
+    if (out == nullptr) {
+        return false;
+    }
+
+    long ival = strtol(strptr, &endptr, 10);
+    if ((ival == LONG_MIN || ival == LONG_MAX) && errno == ERANGE) {
+        return false;
+    }
+    if (endptr == nullptr) {
+        return false;
+    }
+    if (ival < INT16_MIN && INT16_MAX < ival) {
+        return false;
+    }
+    unsigned long fval = 0;
+    if (*endptr == '.') {
+        // INT32_MAX = 2147483647
+        char buf[] = "00000000";
+        size_t max_length = strlen(buf);
+        const char* p = endptr + 1;
+        for (size_t i = 0; i < max_length; i++) {
+            if (isDigit(*p)) {
+                buf[i] = *p++;
+                continue;
+            }
+            break;
+        }
+        fval = strtoul(buf, &endptr, 10);
+        if (fval == ULONG_MAX && errno == ERANGE) {
+            return false;
+        }
+        if (endptr == nullptr) {
+            return false;
+        }
+        if (endptr == nullptr || endptr == buf || *endptr != '\0') {
+            return false;
+        }
+    }
+    int32_t val = ival;
+    if (strptr[0] == '-') {
+        for (int i = 0; i < 4; i++) {
+            fval = fval * 16;
+            val = (val * 16) - (fval / 100000000);
+            fval = fval % 100000000;
+        }
+    } else {
+        for (int i = 0; i < 4; i++) {
+            fval = fval * 16;
+            val = (val * 16) + (fval / 100000000);
+            fval = fval % 100000000;
+        }
+    }
+    *out = (uint32_t)val;
+
+    return true;
+}
+
 static bool parseNotename(const String& str, uint32_t* out) {
     const unsigned char kBasenote[] = {69, 71, 60, 62, 64, 65, 67};
 
@@ -291,9 +351,18 @@ bool SFZSink::begin() {
         debug_printf("[%s::%s] regions: %d\n", kClassName, __func__, (int)regions_.size());
 #if DEBUG
         for (size_t i = 0; i < regions_.size(); i++) {
-            debug_printf("[%s::%s] %d/%d: \"%s\" lk=%d,hk=%d,sl=%d o=%d,e=%d lm=%d,c=%d ls=%d,le=%d\n", kClassName, __func__, (int)(i + 1),
-                         (int)regions_.size(), regions_[i].sample.c_str(), regions_[i].lokey, regions_[i].hikey, regions_[i].sw_last, regions_[i].offset,
-                         regions_[i].end, (int)regions_[i].loop_mode, regions_[i].count, regions_[i].loop_start, regions_[i].loop_end);
+            debug_printf(
+                "[%s::%s] %d/%d: \"%s\" "
+                "lc=%d,hc=%d lk=%d,hk=%d,sl=%d hv=%d,lv=%d o=%d,e=%d lm=%d,c=%d ls=%d,le=%d\n",
+                kClassName, __func__,                                       // [file::class]
+                (int)(i + 1), (int)regions_.size(),                         // i/N
+                regions_[i].sample.c_str(),                                 // sample
+                regions_[i].lochan, regions_[i].hichan,                     // lochan,hichan
+                regions_[i].lokey, regions_[i].hikey, regions_[i].sw_last,  // lokey,hikey,sw_last
+                regions_[i].lovel, regions_[i].hivel,                       // lovel,hivel
+                regions_[i].offset, regions_[i].end,                        // offset,end
+                (int)regions_[i].loop_mode, regions_[i].count,              // loop_mode,count
+                regions_[i].loop_start, regions_[i].loop_end);              // loop_start,loop_end
         }
 #endif
     }
@@ -403,6 +472,29 @@ bool SFZSink::sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) {
     startPlayback(note, velocity, channel, region);
 
     return true;
+}
+
+size_t SFZSink::getNumberOfRegions() {
+    return regions_.size();
+}
+
+const SFZSink::Region* SFZSink::getRegion(size_t id) {
+    if (id < regions_.size()) {
+        return &regions_[id];
+    }
+    return nullptr;
+}
+
+uint8_t SFZSink::getSwLoKey() {
+    return sw_lokey_;
+}
+
+uint8_t SFZSink::getSwHiKey() {
+    return sw_hikey_;
+}
+
+uint8_t SFZSink::getSwLast() {
+    return sw_last_;
 }
 
 void SFZSink::startSfz() {
@@ -515,8 +607,8 @@ void SFZSink::opcode(const String& opcode, const String& value) {
         {"key",          kOpcodeLokey,       NOTE_NUMBER_MIN, NOTE_NUMBER_MAX, parseNotename},
         {"lovel",        kOpcodeLovel,       0,               127,             parseUint32  },
         {"hivel",        kOpcodeHivel,       0,               127,             parseUint32  },
-        {"lorand",       kOpcodeLorand,      0x00000000,      0x80000000,      parseUint32  }, //< not supported
-        {"hirand",       kOpcodeHirand,      0x00000000,      0x80000000,      parseUint32  }, //< not supported
+        {"lorand",       kOpcodeLorand,      0x00000000,      0x00010000,      parseQ16     }, //< not supported
+        {"hirand",       kOpcodeHirand,      0x00000000,      0x00010000,      parseQ16     }, //< not supported
         {"seq_length",   kOpcodeSeqLength,   1,               100,             parseUint32  }, //< not supported
         {"seq_position", kOpcodeSeqPosition, 1,               100,             parseUint32  }, //< not supported
         {"group",        kOpcodeGroup,       0,               UINT32_MAX,      parseUint32  }, //< not supported

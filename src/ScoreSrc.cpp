@@ -11,7 +11,7 @@
 #include "midi_util.h"
 #include "ScoreParser.h"
 
-//#define DEBUG (1)
+// #define DEBUG (1)
 
 // clang-format off
 #define nop(...) do {} while (0)
@@ -28,21 +28,15 @@
 
 static const char kClassName[] = "ScoreSrc";
 
-const int kDefaultTempo = (int)60000000 / 120;
+static const int kDefaultTempo = (int)60000000 / 120;  // 120BPM = 500,000us
 
-ScoreSrc::ScoreSrc(const String& file_name, Filter& filter) : ScoreSrc(file_name, false, filter) {
-}
-
-ScoreSrc::ScoreSrc(const String& file_name, bool auto_start, Filter& filter)
+ScoreSrc::ScoreSrc(const String& file_name, Filter& filter)
     : ScoreFilter(file_name, filter),
-      current_tempo_(kDefaultTempo),
-      duration_(0),
-      schedule_time_(0),
-      total_delta_time_(0),
-      default_state_(auto_start ? ScoreFilter::PLAY : ScoreFilter::PAUSE),
+      time_keeper_(),
+      default_state_(ScoreFilter::PAUSE),
       play_state_(default_state_),
       next_state_(default_state_),
-      is_auto_playing_(auto_start),
+      is_continuous_playback_(false),
       is_event_available_(false),
       is_music_start_(false),
       midi_message_() {
@@ -60,55 +54,40 @@ bool ScoreSrc::begin() {
 }
 
 void ScoreSrc::update() {
+    time_keeper_.setCurrentTime();
     if (play_state_ == ScoreFilter::END) {
-        // debug_printf("[%s::%s] END SCORE\n", kClassName, __func__);
-        if (is_auto_playing_) {
-            int next_index = getScoreIndex() + 1;
-            if (next_index >= getNumberOfScores()) {
-                next_index = 0;
-            }
-            if (setScoreIndex(next_index)) {
-                debug_printf("[%s::%s] NEXT SCORE\n", kClassName, __func__);
-            }
-        }
         return;
     }
     if (is_music_start_) {
-        schedule_time_ = millis();
+        time_keeper_.startSmfTimer();
         is_music_start_ = false;
     }
-    if (isParserAvailable()) {
+    if (isParserAvailable() && play_state_ != ScoreFilter::END) {
         if (!is_event_available_) {
-            unsigned long prev_total_delta_time = total_delta_time_;
             getMidiMessage(&midi_message_);
-            total_delta_time_ += midi_message_.delta_time;
-            debug_printf("[%s::%s] delta_time:%d,", kClassName, __func__, midi_message_.delta_time);
-            debug_printf(" status_byte:%02x, data_byte1:%02x, data_byte2:%02x,", midi_message_.status_byte, midi_message_.data_byte1, midi_message_.data_byte2);
-            debug_printf(" event_code:%02x, event_length:%02x\n", midi_message_.event_code, midi_message_.event_length);
-
-            uint16_t root_tick = getRootTick();
-            if (root_tick != 0) {
-                schedule_time_ += (unsigned long)(((current_tempo_ / root_tick) * total_delta_time_) / 1000) -
-                                  (unsigned long)(((current_tempo_ / root_tick) * prev_total_delta_time) / 1000);
-            }
             is_event_available_ = true;
+            debug_printf("[%s::%s] MIDI message %d, (%02X, %02X, %02X), (%02X, %02X)\n",                 //
+                         kClassName, __func__, midi_message_.delta_time,                                 //
+                         midi_message_.status_byte, midi_message_.data_byte1, midi_message_.data_byte2,  //
+                         midi_message_.event_code, midi_message_.event_length);                          //
+            time_keeper_.setScheduleTime(midi_message_.delta_time);
         }
 
         if (play_state_ != next_state_) {
-            trace_printf("[%s::%s] old stat:%d, now stat:%d\n", kClassName, __func__, play_state_, next_state_);
+            trace_printf("[%s::%s] change state %d => %d\n", kClassName, __func__, play_state_, next_state_);
             if (next_state_ == ScoreFilter::PAUSE) {
                 // hold remaining time
-                duration_ = schedule_time_ - millis();
+                time_keeper_.stopSmfTimer();
                 ScoreFilter::sendStop();
             } else if (next_state_ == ScoreFilter::PLAY) {
                 // re-calculate schedule time
-                schedule_time_ = millis() + duration_;
+                time_keeper_.continueSmfTimer();
                 ScoreFilter::sendContinue();
             }
             play_state_ = next_state_;
-        } else if (schedule_time_ <= millis() && play_state_ == PLAY) {
+        } else if (time_keeper_.isScheduledTime() && play_state_ == ScoreFilter::PLAY) {
+            time_keeper_.forward(midi_message_.delta_time);
             executeMidiEvent(midi_message_);
-            memset(&midi_message_, 0x00, sizeof(midi_message_));
             is_event_available_ = false;
         }
     }
@@ -116,7 +95,9 @@ void ScoreSrc::update() {
 }
 
 bool ScoreSrc::isAvailable(int param_id) {
-    if (param_id == ScoreFilter::PARAMID_STATUS) {
+    if (param_id == ScoreSrc::PARAMID_CONTINUOUS_PLAYBACK) {
+        return true;
+    } else if (param_id == ScoreFilter::PARAMID_STATUS) {
         return true;
     } else {
         return ScoreFilter::isAvailable(param_id);
@@ -124,7 +105,9 @@ bool ScoreSrc::isAvailable(int param_id) {
 }
 
 intptr_t ScoreSrc::getParam(int param_id) {
-    if (param_id == ScoreFilter::PARAMID_STATUS) {
+    if (param_id == ScoreSrc::PARAMID_CONTINUOUS_PLAYBACK) {
+        return is_continuous_playback_;
+    } else if (param_id == ScoreFilter::PARAMID_STATUS) {
         return play_state_;
     } else {
         return ScoreFilter::getParam(param_id);
@@ -132,7 +115,10 @@ intptr_t ScoreSrc::getParam(int param_id) {
 }
 
 bool ScoreSrc::setParam(int param_id, intptr_t value) {
-    if (param_id == ScoreFilter::PARAMID_STATUS) {
+    if (param_id == ScoreSrc::PARAMID_CONTINUOUS_PLAYBACK) {
+        is_continuous_playback_ = value ? true : false;
+        return true;
+    } else if (param_id == ScoreFilter::PARAMID_STATUS) {
         if (play_state_ != ScoreFilter::END) {
             next_state_ = value;
         }
@@ -145,10 +131,35 @@ bool ScoreSrc::setParam(int param_id, intptr_t value) {
 }
 
 bool ScoreSrc::sendSongPositionPointer(uint16_t beats) {
+    debug_printf("[%s::%s] SongPositionPointer(%d)\n", kClassName, __func__, beats);
+    if (isParserAvailable() && play_state_ != ScoreFilter::END) {
+        uint32_t ticks = time_keeper_.midiBeatToTick(beats);
+        if (ticks < time_keeper_.getTotalTick()) {
+            setScoreIndex(getScoreIndex());
+        }
+        while (time_keeper_.getTotalTick() < ticks && play_state_ != ScoreFilter::END) {
+            if (!is_event_available_) {
+                getMidiMessage(&midi_message_);
+                is_event_available_ = true;
+            }
+            if (time_keeper_.getTotalTick() + midi_message_.delta_time <= ticks) {
+                time_keeper_.forward(midi_message_.delta_time);
+                if (midi_message_.status_byte == MIDI_MSG_META_EVENT) {
+                    executeMidiEvent(midi_message_);  // for SetTempo and EndOfTrack
+                }
+                is_event_available_ = false;
+            } else {
+                time_keeper_.setSmfDuration(time_keeper_.calculateDurationMs(midi_message_.delta_time - ticks));
+                debug_printf("[%s::%s] remain_ticks=%d, tempo=%d\n", kClassName, __func__, (int)ticks, time_keeper_.getTempo());
+                break;
+            }
+        }
+    }
     return true;
 }
 
 bool ScoreSrc::sendSongSelect(uint8_t song) {
+    debug_printf("[%s::%s] SongSelect(%d)\n", kClassName, __func__, song);
     return setScoreIndex(song);
 }
 
@@ -164,14 +175,43 @@ bool ScoreSrc::sendStop() {
     return true;
 }
 
+bool ScoreSrc::sendMtcFullMessage(uint8_t hr, uint8_t mn, uint8_t sc, uint8_t fr) {
+    debug_printf("[%s::%s] FullMessage(%d,%02d:%02d:%02d:%02d)\n", kClassName, __func__,  //
+                 (hr >> 5) & 0x03, hr & 0x1F, mn & 0x3F, sc & 0x3F, fr & 0x1F);
+
+    time_keeper_.setCurrentTime();
+
+    if (isParserAvailable() && play_state_ != ScoreFilter::END) {
+        unsigned long target_ms = time_keeper_.mtcToMs(hr, mn, sc, fr);
+        debug_printf("[%s::%s] current_ms=%d, target_ms=%d\n", kClassName, __func__,  //
+                     (int)time_keeper_.calculateCurrentMs(0), (int)target_ms);
+
+        while (play_state_ != ScoreFilter::END) {
+            if (time_keeper_.isBeforeScheduledMs(target_ms)) {
+                time_keeper_.rescheduleTime(target_ms);
+                break;
+            } else {
+                time_keeper_.forward(midi_message_.delta_time);
+                executeMidiEvent(midi_message_);
+                is_event_available_ = false;
+            }
+
+            if (!is_event_available_) {
+                getMidiMessage(&midi_message_);
+                is_event_available_ = true;
+            }
+        }
+    }
+
+    return true;
+}
+
 bool ScoreSrc::setScoreIndex(int id) {
     if (ScoreFilter::setScoreIndex(id)) {
-        duration_ = 0;
-        schedule_time_ = 0;
-        play_state_ = default_state_;
+        time_keeper_.reset(getRootTick(), kDefaultTempo);
+        play_state_ = next_state_ = default_state_;
         is_event_available_ = false;
         is_music_start_ = true;
-        memset(&midi_message_, 0x00, sizeof(midi_message_));
         return true;
     }
 
@@ -193,12 +233,25 @@ bool ScoreSrc::executeMidiEvent(const ScoreParser::MidiMessage& msg) {
             for (uint32_t i = 0; i < msg.event_length; i++) {
                 tempo = (tempo << 8) | msg.sysex_array[i];
             }
-            current_tempo_ = tempo & 0x00FFFFFF;
-            debug_printf("[%s::%s] set tempo to %d\n", kClassName, __func__, current_tempo_);
-            total_delta_time_ = 0;
+            time_keeper_.setTempo(tempo & 0x00FFFFFF);
+            debug_printf("[%s::%s] set tempo to %d\n", kClassName, __func__, time_keeper_.getTempo());
         } else if (msg.event_code == MIDI_META_END_OF_TRACK) {
             debug_printf("[%s::%s] end of track\n", kClassName, __func__);
-            play_state_ = ScoreFilter::END;
+            if (is_continuous_playback_) {
+                int current_state = play_state_;
+                int next_index = getScoreIndex() + 1;
+                if (next_index >= getNumberOfScores()) {
+                    next_index = 0;
+                }
+                if (setScoreIndex(next_index)) {
+                    next_state_ = current_state;
+                } else {
+                    play_state_ = ScoreFilter::END;
+                }
+            } else {
+                play_state_ = ScoreFilter::END;
+            }
+            return true;
         } else if (msg.event_code < 0x80) {
             debug_printf("[%s::%s] event_code %02X is not supported.\n", kClassName, __func__, msg.event_code);
             return false;

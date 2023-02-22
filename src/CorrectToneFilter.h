@@ -8,6 +8,7 @@
 #define CORRECT_TONE_FILTER_H_
 
 #include "ScoreFilter.h"
+#include "TimeKeeper.h"
 #include "YuruInstrumentFilter.h"
 
 class CorrectToneFilter : public ScoreFilter {
@@ -20,7 +21,6 @@ public:
     };
 
     CorrectToneFilter(const String& file_name, Filter& filter);
-    CorrectToneFilter(const String& file_name, bool auto_start, Filter& filter);
     ~CorrectToneFilter();
 
     bool begin() override;
@@ -36,17 +36,13 @@ public:
     bool setScoreIndex(int id);
 
 private:
-    // schedule
-    int current_tempo_;
-    unsigned long duration_;
-    unsigned long schedule_time_;
-    unsigned long total_delta_time_;
+    TimeKeeper time_keeper_;
 
     // playback
     int default_state_;
     int play_state_;
     int next_state_;
-    bool is_event_available;
+    bool is_event_available_;
     bool is_music_start_;
 
     ScoreParser::MidiMessage midi_message_;

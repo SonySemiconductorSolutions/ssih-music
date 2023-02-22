@@ -87,8 +87,6 @@ public:
         uint32_t loop;
     };
 
-    friend class SfzTest;
-
     SFZSink(const String& sfz_path);
     ~SFZSink();
 
@@ -102,6 +100,12 @@ public:
 
     bool sendNoteOff(uint8_t note, uint8_t velocity, uint8_t channel) override;
     bool sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) override;
+
+    size_t getNumberOfRegions();
+    const Region* getRegion(size_t id);
+    uint8_t getSwLoKey();
+    uint8_t getSwHiKey();
+    uint8_t getSwLast();
 
     // SFZHandler
     void startSfz() override;

@@ -13,7 +13,9 @@ class PcmRenderer {
 public:
     enum State {
         kStateUnallocated,
+        kStateAllocating,
         kStateAllocated,
+        kStateDeallocating,
         kStateDeallocated,
         kStateReady = kStateUnallocated,
         kStateActive = kStateAllocated,

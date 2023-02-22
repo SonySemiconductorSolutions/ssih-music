@@ -45,7 +45,7 @@ static void showRegistingNote(const std::vector<ScoreFilter::Note>& playing_note
 }
 
 ScoreFilter::ScoreFilter(const String& file_name, Filter& filter)
-    : BaseFilter(filter), file_name_(file_name), parser_(nullptr), score_index_(0), root_tick_(kDefaultTick), playing_notes_(), play_track_flags_(~0) {
+    : BaseFilter(filter), file_name_(file_name), score_name_(), parser_(nullptr), score_index_(0), root_tick_(kDefaultTick), playing_notes_(), play_track_flags_(~0) {
 }
 
 ScoreFilter::~ScoreFilter() {
@@ -62,6 +62,7 @@ bool ScoreFilter::begin() {
         error_printf("[%s::%s] error: parser isnot available\n", kClassName, __func__);
         return false;
     }
+    parser_->setPlayTrack(play_track_flags_);
     debug_printf("[%s::%s] score num:%d\n", kClassName, __func__, parser_->getNumberOfScores());
     if (parser_->getNumberOfScores() <= 0) {
         error_printf("[%s::%s] error: Score not found.\n", kClassName, __func__);
@@ -121,11 +122,13 @@ intptr_t ScoreFilter::getParam(int param_id) {
         if (parser_ == nullptr) {
             return (intptr_t) nullptr;
         } else {
-            return (intptr_t)parser_->getFileName().c_str();
+            score_name_ = parser_->getFileName();
+            return (intptr_t)score_name_.c_str();
         }
     } else {
         return BaseFilter::getParam(param_id);
     }
+    return false;
 }
 
 bool ScoreFilter::setParam(int param_id, intptr_t value) {
@@ -133,31 +136,28 @@ bool ScoreFilter::setParam(int param_id, intptr_t value) {
     if (param_id == ScoreFilter::PARAMID_NUMBER_OF_SCORES) {
         return false;
     } else if (param_id == ScoreFilter::PARAMID_ENABLE_TRACK) {
-        if (parser_ == nullptr) {
-            if (value < kMaxTrack) {
-                play_track_flags_ = play_track_flags_ | (1U << value);
-                return true;
-            }
+        if (value >= kMaxTrack) {
             return false;
-        } else {
-            return parser_->setEnableTrack((uint16_t)value);
         }
+        play_track_flags_ = play_track_flags_ | (1U << value);
+        if (parser_) {
+            parser_->setPlayTrack(play_track_flags_);
+        }
+        return true;
     } else if (param_id == ScoreFilter::PARAMID_DISABLE_TRACK) {
-        if (parser_ == nullptr) {
-            if (value < kMaxTrack) {
-                play_track_flags_ = play_track_flags_ & ~(1U << value);
-                return true;
-            }
+        if (value >= kMaxTrack) {
             return false;
-        } else {
-            return parser_->setDisableTrack((uint16_t)value);
         }
+        play_track_flags_ = play_track_flags_ & ~(1U << value);
+        if (parser_) {
+            parser_->setPlayTrack(play_track_flags_);
+        }
+        return true;
     } else if (param_id == ScoreFilter::PARAMID_TRACK_MASK) {
-        if (parser_ == nullptr) {
-            play_track_flags_ = value;
+        play_track_flags_ = value;
+        if (parser_) {
+            parser_->setPlayTrack((uint32_t)value);
             return true;
-        } else {
-            return parser_->setPlayTrack((uint32_t)value);
         }
     } else if (param_id == ScoreFilter::PARAMID_SCORE) {
         return setScoreIndex((int)value);
@@ -166,6 +166,7 @@ bool ScoreFilter::setParam(int param_id, intptr_t value) {
     } else {
         return BaseFilter::setParam(param_id, value);
     }
+    return false;
 }
 
 bool ScoreFilter::sendNoteOff(uint8_t note, uint8_t velocity, uint8_t channel) {
@@ -224,73 +225,73 @@ bool ScoreFilter::sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) {
 }
 
 bool ScoreFilter::sendSongPositionPointer(uint16_t beats) {
+    debug_printf("[%s::%s] enter(%d)\n", kClassName, __func__, (int)beats);
     for (auto& e : playing_notes_) {
         if (e.stat != END) {
             sendNoteOff(e.note, e.velocity, e.channel);
             e.stat = END;
         }
     }
-    return true;
+    return BaseFilter::sendSongPositionPointer(beats);
 }
 
 bool ScoreFilter::sendSongSelect(uint8_t song) {
+    debug_printf("[%s::%s] enter(%d)\n", kClassName, __func__, (int)song);
     bool ret = true;
-    if (sendSongPositionPointer(0) == false) {
+    if (setScoreIndex(song) == false) {
         ret = false;
     }
-    setScoreIndex(song);
-    return ret;
-}
-
-bool ScoreFilter::sendStart() {
-    bool ret = true;
-    if (sendSongPositionPointer(0) == false) {
-        ret = false;
-    }
-    if (sendContinue() == false) {
+    if (BaseFilter::sendSongPositionPointer(song) == false) {
         ret = false;
     }
     return ret;
 }
 
 bool ScoreFilter::sendContinue() {
+    debug_printf("[%s::%s] enter()\n", kClassName, __func__);
     for (auto& e : playing_notes_) {
         if (e.stat == PAUSE) {
             sendNoteOn(e.note, e.velocity, e.channel);
             e.stat = PLAY;
         }
     }
-    return true;
+    return BaseFilter::sendContinue();
 }
 
 bool ScoreFilter::sendStop() {
+    debug_printf("[%s::%s] enter()\n", kClassName, __func__);
     for (auto& e : playing_notes_) {
         if (e.stat == PLAY) {
             sendNoteOff(e.note, e.velocity, e.channel);
             e.stat = PAUSE;
         }
     }
+    return BaseFilter::sendStop();
+}
+
+bool ScoreFilter::sendMtcFullMessage(uint8_t hr, uint8_t mn, uint8_t sc, uint8_t fr) {
+    debug_printf("[%s::%s] enter(%d,%02d:%02d:%02d:%02d)\n", kClassName, __func__,  //
+                 (hr >> 5) & 0x03, hr & 0x1F, mn & 0x3F, sc & 0x3F, fr & 0x1F);
     return true;
 }
 
 bool ScoreFilter::sendMidiMessage(uint8_t* msg, size_t length) {
+    debug_printf("[%s::%s] enter(%p,%d)\n", kClassName, __func__, msg, (int)length);
     if (msg == nullptr || length == 0) {
         return false;
     }
-    debug_printf("[%s::%s] Execute MIDI Message\n", kClassName, __func__);
-    if (msg[0] == MIDI_MSG_SONG_POSITION_POINTER && length >= MIDI_MSGLEN_SONG_POSITION_POINTER) {
-        return sendSongPositionPointer(((msg[2] & 0x7F) << 7) | ((msg[1] & 0x7F) << 0));
-    } else if (msg[0] == MIDI_MSG_SONG_SELECT && length >= MIDI_MSGLEN_SONG_SELECT) {
-        return sendSongSelect(msg[1] & 0x7F);
-    } else if (msg[0] == MIDI_MSG_START && length >= MIDI_MSGLEN_START) {
-        return sendStart();
-    } else if (msg[0] == MIDI_MSG_CONTINUE && length >= MIDI_MSGLEN_CONTINUE) {
-        return sendContinue();
-    } else if (msg[0] == MIDI_MSG_STOP && length >= MIDI_MSGLEN_STOP) {
-        return sendStop();
-    } else {
-        return BaseFilter::sendMidiMessage(msg, length);
+    if (msg[0] == MIDI_MSG_SYS_EX_EVENT) {
+        if (length >= 10) {
+            if (msg[1] == 0x7F &&  // real-time universal message
+                msg[2] == 0x7F &&  // <device ID> = global broadcast
+                msg[3] == 0x01 &&  // MIDI Time Code
+                msg[4] == 0x01 &&  // Full Time Code Message
+                msg[9] == 0xF7) {  // EOX
+                return sendMtcFullMessage(msg[5], msg[6], msg[7], msg[8]);
+            }
+        }
     }
+    return BaseFilter::sendMidiMessage(msg, length);
 }
 
 bool ScoreFilter::isParserAvailable() {
@@ -327,7 +328,6 @@ bool ScoreFilter::setScoreIndex(int index) {
     parser_->loadScore(index);
     root_tick_ = parser_->getRootTick();
     debug_printf("[%s::%s] select title:%s, root_tick_:%d\n", kClassName, __func__, parser_->getTitle(index).c_str(), root_tick_);
-    sendSongPositionPointer(0);
     return true;
 }
 

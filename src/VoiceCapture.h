@@ -20,8 +20,10 @@
 
 #define SUB_CORE_ID (1)
 
-#define MP_MTOS_ID (100)
-#define MP_STOM_ID (101)
+#define MSGID_INIT (110)
+#define MSGID_INIT_DONE (113)
+#define MSGID_SEND_CAPTURE (114)
+#define MSGID_SEND_RESULT (115)
 
 // pitch detector parameter
 static const int PITDT_SAMPLE_FRQ = 8000;
@@ -68,7 +70,32 @@ public:
     enum ParamId {                      // MAGIC CHAR = 'V'
         PARAMID_MIC_GAIN = ('V' << 8),  //<
         PARAMID_INPUT_LEVEL,            //<
+        PARAMID_RECORDING_TIME,         //<
         PARAMID_RECORDING               //<
+    };
+
+    class Recorder {
+    public:
+        enum State { RECORDER_STATE_INIT, RECORDER_STATE_RECORDING, RECORDER_STATE_FULL };
+        Recorder();
+        ~Recorder();
+
+        bool start();
+        bool end();
+        void writeFrame(void* buffer);
+        void flush();
+
+        bool isRecording();
+        int getRecordingTime();
+        bool setRecordingTime(int value);
+
+    private:
+        int state_;
+        File file_;
+        uint8_t* buffer_;
+        int frame_index_;
+        int recording_time_;
+        int seconds_;
     };
 
     VoiceCapture(Filter& filter);
@@ -80,7 +107,6 @@ public:
     bool isAvailable(int param_id) override;
     intptr_t getParam(int param_id) override;
     bool setParam(int param_id, intptr_t value) override;
-
 #if 0
     bool onMicFrontend(AsMicFrontendEvent evtype, uint32_t result, uint32_t sub_result);
 #endif
@@ -98,10 +124,7 @@ private:
     size_t send_frames_;
     size_t receive_frames_;
 
-    bool is_recording_;
-    uint8_t* dump_buffer_;
-    size_t wp_;
-    size_t rp_;
+    Recorder recorder_;
 #endif  // ARDUINO_ARCH_SPRESENSE
 };
 

@@ -20,7 +20,6 @@ public:
     };
 
     OneKeySynthesizerFilter(const String& file_name, Filter& filter);
-    OneKeySynthesizerFilter(const String& file_name, bool auto_start, Filter& filter);
     ~OneKeySynthesizerFilter();
 
     bool begin() override;
@@ -36,7 +35,6 @@ public:
     bool setScoreIndex(int id);
 
 private:
-    int default_state_;
     int play_state_;
 
     ScoreParser::MidiMessage midi_message_;

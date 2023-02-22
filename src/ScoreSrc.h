@@ -8,12 +8,16 @@
 #define SCORE_SRC_H_
 
 #include "ScoreFilter.h"
+#include "TimeKeeper.h"
 #include "YuruInstrumentFilter.h"
 
 class ScoreSrc : public ScoreFilter {
 public:
+    enum ParamId {                                // MAGIC CHAR = '#'
+        PARAMID_CONTINUOUS_PLAYBACK = ('#' << 8)  //<
+    };
+
     ScoreSrc(const String& file_name, Filter& filter);
-    ScoreSrc(const String& file_name, bool auto_start, Filter& filter);
     virtual ~ScoreSrc();
 
     bool begin() override;
@@ -27,21 +31,19 @@ public:
     bool sendSongSelect(uint8_t song) override;
     bool sendContinue() override;
     bool sendStop() override;
+    bool sendMtcFullMessage(uint8_t hr, uint8_t mn, uint8_t sc, uint8_t fr) override;
 
     bool setScoreIndex(int index);
 
 private:
     // schedule
-    int current_tempo_;
-    unsigned long duration_;
-    unsigned long schedule_time_;
-    unsigned long total_delta_time_;
+    TimeKeeper time_keeper_;
 
     // playback
     int default_state_;
     int play_state_;
     int next_state_;
-    bool is_auto_playing_;
+    bool is_continuous_playback_;
     bool is_event_available_;
     bool is_music_start_;
 

@@ -14,12 +14,15 @@
 #include <OneKeySynthesizerFilter.h>
 #include <SFZSink.h>
 
+#include "Button.h"
+
 SFZSink sink("SawLpf.sfz");
 OneKeySynthesizerFilter inst("SCORE", sink);
 
-static const int PLAY_CHANNEL = DEFAULT_CHANNEL;
-int button4 = HIGH;
-int button5 = HIGH;
+Button button4(PIN_D04);
+Button button5(PIN_D05);
+
+int PLAY_CHANNEL = 2;
 
 void setup() {
     // init built-in I/O
@@ -28,10 +31,6 @@ void setup() {
     pinMode(LED1, OUTPUT);
     pinMode(LED2, OUTPUT);
     pinMode(LED3, OUTPUT);
-
-    // init buttons
-    pinMode(PIN_D04, INPUT_PULLUP);
-    pinMode(PIN_D05, INPUT_PULLUP);
 
     // setup instrument
     if (!inst.begin()) {
@@ -45,24 +44,20 @@ void setup() {
 }
 
 void loop() {
-    int button4_input = digitalRead(PIN_D04);
-    if (button4_input != button4) {
-        if (button4_input == LOW) {
+    if (button4.hasChanged()) {
+        if (button4.isPressed()) {
             inst.sendNoteOn(OneKeySynthesizerFilter::NOTE_ALL, DEFAULT_VELOCITY, PLAY_CHANNEL);
         } else {
             inst.sendNoteOff(OneKeySynthesizerFilter::NOTE_ALL, DEFAULT_VELOCITY, PLAY_CHANNEL);
         }
-        button4 = button4_input;
     }
 
-    int button5_input = digitalRead(PIN_D05);
-    if (button5_input != button5) {
-        if (button5_input == LOW) {
+    if (button5.hasChanged()) {
+        if (button5.isPressed()) {
             inst.sendNoteOn(OneKeySynthesizerFilter::NOTE_ALL, DEFAULT_VELOCITY, PLAY_CHANNEL);
         } else {
             inst.sendNoteOff(OneKeySynthesizerFilter::NOTE_ALL, DEFAULT_VELOCITY, PLAY_CHANNEL);
         }
-        button5 = button5_input;
     }
 
     // run instrument

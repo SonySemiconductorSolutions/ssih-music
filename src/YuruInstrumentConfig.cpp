@@ -162,10 +162,10 @@ int YuruInstrumentConfig::setParam(const char *param_str, const char *value_str)
         bool is_available = filter_->isAvailable(param_id);
         if (is_available) {
             filter_->setParam(param_id, value);
-            printf("setParam[%d] = %d\n", param_id, (int)value);
+            debug_printf("setParam[%d] = %d\n", param_id, (int)value);
             return 0;
         } else {
-            printf("isAvailable[%d] = %d\n", param_id, is_available);
+            error_printf("isAvailable[%d] = %d\n", param_id, is_available);
         }
     }
     return -kErrInval;

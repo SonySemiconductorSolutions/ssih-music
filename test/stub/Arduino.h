@@ -70,5 +70,6 @@ int isSpace(int ch);
 // Communication
 
 extern HardwareSerial Serial;
+extern HardwareSerial Serial2;
 
 #endif  // DUMMY_ARDUINO_H_

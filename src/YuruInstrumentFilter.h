@@ -33,6 +33,11 @@ public:
 
     virtual bool sendNoteOff(uint8_t note, uint8_t velocity, uint8_t channel) = 0;
     virtual bool sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) = 0;
+    virtual bool sendSongPositionPointer(uint16_t beats) = 0;
+    virtual bool sendSongSelect(uint8_t song) = 0;
+    virtual bool sendStart() = 0;
+    virtual bool sendContinue() = 0;
+    virtual bool sendStop() = 0;
 
     virtual bool sendMidiMessage(uint8_t* msg, size_t length) = 0;
 };
@@ -52,6 +57,11 @@ public:
 
     bool sendNoteOff(uint8_t note, uint8_t velocity, uint8_t channel) override;
     bool sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) override;
+    bool sendSongPositionPointer(uint16_t beats) override;
+    bool sendSongSelect(uint8_t song) override;
+    bool sendStart() override;
+    bool sendContinue() override;
+    bool sendStop() override;
 
     bool sendMidiMessage(uint8_t* msg, size_t length) override;
 };
@@ -74,6 +84,13 @@ public:
 
     bool sendNoteOff(uint8_t note, uint8_t velocity, uint8_t channel) override;
     bool sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) override;
+    bool sendSongPositionPointer(uint16_t beats) override;
+    bool sendSongSelect(uint8_t song) override;
+    bool sendStart() override;
+    bool sendContinue() override;
+    bool sendStop() override;
+
+    bool sendMidiMessage(uint8_t* msg, size_t length) override;
 };
 
 #endif  // YURU_INSTRUMENT_FILTER_H_

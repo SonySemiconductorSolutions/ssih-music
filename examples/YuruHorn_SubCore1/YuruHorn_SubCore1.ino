@@ -8,8 +8,6 @@
 #error "Core selection is wrong!!"
 #endif
 
-#include <Arduino.h>
-
 #include <MP.h>
 
 #include <VoiceCapture.h>
@@ -22,7 +20,7 @@
 #include "RingBuff.h"
 
 // Select FFT length
-//#define FFTLEN 512
+// #define FFTLEN 512
 #define FFTLEN 1024
 
 // Ring buffer
@@ -43,59 +41,20 @@ const int VOICE_VOLUME = 800;
 const int HUMAN_VOICE_FREQ_MIN = 80;
 const int HUMAN_VOICE_FREQ_MAX = 1100;
 
-void setup() {
-    int ret = 0;
+enum { NO_ERROR = 0, ERROR_MP_BEGIN = 2, ERROR_MP_SEND, ERROR_LIB_INIT, ERROR_LIB_SET };
 
-    // Initialize MP library
-    ret = MP.begin();
-    if (ret < 0) {
-        errorLoop(2);
-    }
-    // receive with non-blocking
-    MP.RecvTimeout(MP_RECV_POLLING);
-}
-
-void loop() {
-    int ret;
-    int8_t msgid;
-    VoiceCapture::Capture *capture;
-
-    uint16_t input_level = 0;
-
-    // Receive PCM captured buffer from MainCore
-    ret = MP.Recv(&msgid, &capture);
-    if (ret >= 0) {
-        ledOn(LED1);
-        input_level = analyzeVolume((int16_t *)capture->data, CAP_SAMPLE_CNT);
-        ringbuf.put((q15_t *)capture->data, CAP_SAMPLE_CNT);
-    }
-
-    while (ringbuf.stored() >= FFTLEN) {
-        float peak = fftProcessing();
-        static VoiceCapture::Result result = {0};
-
-        result.id = capture->id;
-        result.freq_numer = peak * capture->fs;
-        result.freq_denom = CAP_SAMPLE_FRQ;
-
-        if (VOICE_VOLUME < input_level) {
-            result.volume = input_level;
-        } else {
-            result.freq_numer = 0.0f;
-            result.volume = 0;
+void errorStop(int num) {
+    const int BLINK_TIME_MS = 300;
+    const int INTERVAL_MS = 1000;
+    while (true) {
+        for (int i = 0; i < num; i++) {
+            ledOn(LED1);
+            delay(BLINK_TIME_MS);
+            ledOff(LED1);
+            delay(BLINK_TIME_MS);
         }
-
-        result.capture_time = capture->capture_time;
-        result.result_time = millis();
-
-        if (capture->reserved == 1) {
-            MPLog("Frame %d (Send:%d) => freq_numer:%4d freq_denom:%4d volume:%4d (Return:%d)\n", result.id, result.capture_time, result.freq_numer,
-                  result.freq_denom, result.volume, result.result_time);
-        }
-
-        MP.Send(MP_STOM_ID, &result);
+        delay(INTERVAL_MS);
     }
-    ledOff(LED1);
 }
 
 uint16_t analyzeVolume(const int16_t *input, int length) {
@@ -117,6 +76,90 @@ uint16_t analyzeVolume(const int16_t *input, int length) {
     } else {
         return 0;
     }
+}
+
+void setup() {
+    int ret = 0;
+
+    ret = MP.begin();
+    if (ret < 0) {
+        MPLog("error: MP.begin => %d\n", ret);
+        errorStop(ERROR_MP_BEGIN);
+    }
+    MP.RecvTimeout(MP_RECV_BLOCKING);
+
+    while (true) {
+        int8_t rcvid = -1;
+        uint32_t msgdata = 0;
+        ret = MP.Recv(&rcvid, &msgdata);
+        if (rcvid == MSGID_INIT) {
+            ret = MP.Send(MSGID_INIT_DONE, nullptr);
+            if (ret < 0) {
+                MPLog("MP.Send = %d\n", ret);
+                errorStop(ERROR_MP_SEND);
+            }
+            break;
+        }
+    }
+
+    MPLog("setup done\n");
+}
+
+void loop() {
+    uint16_t input_level = 0;
+
+    int8_t rcvid = -1;
+    VoiceCapture::Capture *capture = nullptr;
+    int ret = 0;
+
+    ret = MP.Recv(&rcvid, &capture);
+    if (ret < 0) {
+        MPLog("MP.Recv = %d\n", ret);
+        return;
+    }
+    if (rcvid != MSGID_SEND_CAPTURE) {
+        MPLog("received = %d\n", rcvid);
+        return;
+    }
+    if (capture == nullptr) {
+        MPLog("received invalid data\n", rcvid);
+        return;
+    }
+
+    ledOn(LED1);
+    input_level = analyzeVolume((int16_t *)capture->data, CAP_SAMPLE_CNT);
+    ringbuf.put((q15_t *)capture->data, CAP_SAMPLE_CNT);
+
+    while (ringbuf.stored() >= FFTLEN) {
+        float peak = fftProcessing();
+        static VoiceCapture::Result result = {0};
+
+        result.id = capture->id;
+        result.freq_numer = peak * capture->fs;
+        result.freq_denom = CAP_SAMPLE_FRQ;
+
+        if (VOICE_VOLUME < input_level) {
+            result.volume = input_level;
+        } else {
+            result.freq_numer = 0.0f;
+            result.volume = 0;
+        }
+
+        result.capture_time = capture->capture_time;
+        result.result_time = millis();
+
+        if (capture->reserved == 1) {
+            MPLog("frame=%d, capture_time=%d, freq=%d/%d, volume=%d, result_time=%d\n",  //
+                  result.id,                                                             // frame
+                  result.capture_time,                                                   // capture_time
+                  result.freq_numer, result.freq_denom,                                  // freq (numer/denom)
+                  result.volume,                                                         // volume
+                  result.result_time);                                                   // result_time
+        }
+
+        MP.Send(MSGID_SEND_RESULT, &result);
+    }
+    ledOff(LED1);
 }
 
 float fftProcessing() {
@@ -169,18 +212,4 @@ float getPeakFrequency(float *pData, int fftLen) {
     peakFs = (index + delta) * g_fs / (fftLen - 1);
 
     return peakFs;
-}
-
-void errorLoop(int num) {
-    int i;
-
-    while (1) {
-        for (i = 0; i < num; i++) {
-            ledOn(LED0);
-            delay(300);
-            ledOff(LED0);
-            delay(300);
-        }
-        delay(1000);
-    }
 }

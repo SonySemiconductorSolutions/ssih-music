@@ -32,13 +32,9 @@ static const int kDefaultTempo = (int)60000000 / 120;
 
 static OneKeySynthesizerFilter::Note kInvalidNote = {INVALID_NOTE_NUMBER, 0};
 
-OneKeySynthesizerFilter::OneKeySynthesizerFilter(const String& file_name, Filter& filter) : OneKeySynthesizerFilter(file_name, false, filter) {
-}
-
-OneKeySynthesizerFilter::OneKeySynthesizerFilter(const String& file_name, bool auto_start, Filter& filter)
+OneKeySynthesizerFilter::OneKeySynthesizerFilter(const String& file_name, Filter& filter)
     : ScoreFilter(file_name, filter),
-      default_state_(auto_start ? ScoreFilter::PLAY : ScoreFilter::PAUSE),
-      play_state_(default_state_),
+      play_state_(ScoreFilter::PLAY),
       midi_message_(),
       assigned_notes_(),
       playing_notes_() {
@@ -74,28 +70,15 @@ void OneKeySynthesizerFilter::update() {
 }
 
 bool OneKeySynthesizerFilter::isAvailable(int param_id) {
-    if (param_id == ScoreFilter::PARAMID_STATUS) {
-        return true;
-    } else {
-        return ScoreFilter::isAvailable(param_id);
-    }
+    return ScoreFilter::isAvailable(param_id);
 }
 
 intptr_t OneKeySynthesizerFilter::getParam(int param_id) {
-    if (param_id == ScoreFilter::PARAMID_STATUS) {
-        return play_state_;
-    } else {
-        return ScoreFilter::getParam(param_id);
-    }
+    return ScoreFilter::getParam(param_id);
 }
 
 bool OneKeySynthesizerFilter::setParam(int param_id, intptr_t value) {
-    if (param_id == ScoreFilter::PARAMID_STATUS) {
-        if (play_state_ != ScoreFilter::END) {
-            play_state_ = value;
-        }
-        return true;
-    } else if (param_id == ScoreFilter::PARAMID_SCORE) {
+    if (param_id == ScoreFilter::PARAMID_SCORE) {
         return setScoreIndex((int)value);
     } else {
         return ScoreFilter::setParam(param_id, value);
@@ -183,7 +166,7 @@ bool OneKeySynthesizerFilter::sendNoteOn(uint8_t note, uint8_t velocity, uint8_t
 
 bool OneKeySynthesizerFilter::setScoreIndex(int id) {
     if (ScoreFilter::setScoreIndex(id)) {
-        play_state_ = default_state_;
+        play_state_ = ScoreFilter::PLAY;
         memset(&midi_message_, 0x00, sizeof(midi_message_));
         for (uint8_t channel = 1; channel <= 16; channel++) {
             for (auto& e : assigned_notes_[channel - 1]) {
