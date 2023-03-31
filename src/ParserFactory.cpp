@@ -13,7 +13,7 @@
 #include "SmfParser.h"
 #include "TextScoreParser.h"
 
-//#define DEBUG
+// #define DEBUG
 
 // clang-format off
 #define nop(...) do {} while (0)

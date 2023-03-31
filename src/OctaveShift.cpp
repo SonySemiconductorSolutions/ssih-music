@@ -33,8 +33,8 @@ int OctaveShift::getShift() {
     return shift_;
 }
 
-void OctaveShift::setShift(int new_shift) {
-    shift_ = new_shift;
+void OctaveShift::setShift(int shift) {
+    shift_ = shift;
 }
 
 bool OctaveShift::isAvailable(int param_id) {

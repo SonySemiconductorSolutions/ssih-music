@@ -12,6 +12,10 @@
 
 #include <VoiceCapture.h>
 
+#if SUBCORE != SUB_CORE_ID
+#error "Core selection is wrong!!"
+#endif
+
 // Use CMSIS library
 #define ARM_MATH_CM4
 #define __FPU_PRESENT 1U
@@ -127,16 +131,16 @@ void loop() {
     }
 
     ledOn(LED1);
-    input_level = analyzeVolume((int16_t *)capture->data, CAP_SAMPLE_CNT);
-    ringbuf.put((q15_t *)capture->data, CAP_SAMPLE_CNT);
+    input_level = analyzeVolume((int16_t *)capture->data, CAP_FRAME_LENGTH);
+    ringbuf.put((q15_t *)capture->data, CAP_FRAME_LENGTH);
 
     while (ringbuf.stored() >= FFTLEN) {
         float peak = fftProcessing();
-        static VoiceCapture::Result result = {0};
+        static VoiceCapture::Result result = {0, 0, 0, 0, 0, 0};
 
         result.id = capture->id;
         result.freq_numer = peak * capture->fs;
-        result.freq_denom = CAP_SAMPLE_FRQ;
+        result.freq_denom = CAP_SAMPLING_FREQ;
 
         if (VOICE_VOLUME < input_level) {
             result.volume = input_level;
@@ -163,11 +167,10 @@ void loop() {
 }
 
 float fftProcessing() {
-    int i;
     float peakFs = 0.0f;
 
     // Read from the ring buffer
-    ringbuf.get(pSrc, FFTLEN, CAP_SAMPLE_CNT);
+    ringbuf.get(pSrc, FFTLEN, CAP_FRAME_LENGTH);
 
     // Calculate FFT
     fft(pSrc, pDst, FFTLEN);
@@ -200,7 +203,7 @@ void fft(float *pSrc, float *pDst, int fftLen) {
 }
 
 float getPeakFrequency(float *pData, int fftLen) {
-    float g_fs = (float)CAP_SAMPLE_FRQ;
+    float g_fs = (float)CAP_SAMPLING_FREQ;
     uint32_t index;
     float maxValue;
     float delta;

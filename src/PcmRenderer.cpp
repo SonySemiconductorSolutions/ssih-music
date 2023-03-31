@@ -130,16 +130,6 @@ PcmRenderer::~PcmRenderer() {
     }
 }
 
-PcmRenderer::State PcmRenderer::getState() {
-    debug_printf("[%s::%s] deprecated\n", kClassName, __func__);
-    return states_[0];
-}
-
-void PcmRenderer::setState(PcmRenderer::State state) {
-    debug_printf("[%s::%s] deprecated\n", kClassName, __func__);
-    states_[0] = state;
-}
-
 void PcmRenderer::begin() {
     trace_printf("[%s::%s] ()\n", kClassName, __func__);
     err_t err = AUDIOLIB_ECODE_OK;
@@ -253,10 +243,10 @@ bool PcmRenderer::render() {
                 for (size_t j = 0; j < frame_sample_size; j += 2) {
                     *((uint32_t *)&dst[j]) = __QADD16(*((uint32_t *)&dst[j]), *((uint32_t *)&src[j]));
                 }
-            } else if(states_[i] == kStateDeallocating) {
+            } else if (states_[i] == kStateDeallocating) {
                 // fade-out
                 trace_printf("[%d]:Deallocate\n", i);
-                for (size_t j = 0; j < frame_sample_size; j ++) {
+                for (size_t j = 0; j < frame_sample_size; j++) {
                     src[j] = (int16_t)(src[j] * (float)(frame_sample_size - j) / (frame_sample_size));
                 }
 
@@ -290,12 +280,12 @@ void PcmRenderer::onError(const ErrorAttentionParam *attparam) {
 }
 #endif
 
-void PcmRenderer::onActivated(MsgQueId requester_dtq, MsgType msgtype, AsOutputMixDoneParam *param) {
+void PcmRenderer::onActivated(MsgQueId /*requester_dtq*/, MsgType /*msgtype*/, AsOutputMixDoneParam */*param*/) {
     debug_printf("[%s::%s] info: activated OutputMixer\n", kClassName, __func__);
     render();
 }
 
-void PcmRenderer::onSendData(int32_t identifier, bool is_end) {
+void PcmRenderer::onSendData(int32_t /*identifier*/, bool is_end) {
     // trace_printf("[%s::%s] (%d, %d)\n", kClassName, __func__, identifier, is_end);
     response_count_++;
     while (true) {
@@ -305,7 +295,7 @@ void PcmRenderer::onSendData(int32_t identifier, bool is_end) {
         break;
     }
     if (is_end) {
-        setState(kStateUnallocated);
+        // states_[0] = kStateUnallocated;
     }
 }
 
@@ -384,7 +374,7 @@ size_t PcmRenderer::write(int ch, void *src, size_t request_size) {
             for (size_t i = 0; i < frame_sample_size; i++) {
                 dst[i] = (int16_t)(dst[i] * ((float)i / (frame_sample_size)));
             }
-           states_[ch] = kStateAllocated;
+            states_[ch] = kStateAllocated;
         }
         trace_printf("[%d]:Allocate\n", ch);
 

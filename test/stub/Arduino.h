@@ -36,11 +36,17 @@ typedef unsigned int err_t;
 #define LED2 (2)
 #define LED3 (3)
 #define PIN_D14 (14)
+#define PIN_NOT_ASSIGNED (0xFF)
 
 // Digital I/O
 
 int digitalRead(uint8_t pin);
 void digitalWrite(uint8_t pin, uint8_t value);
+
+// Analog I/O
+
+int analogRead(uint8_t pin);
+void analogWrite(uint8_t pin, uint8_t value);
 
 // Characters
 

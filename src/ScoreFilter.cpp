@@ -35,17 +35,24 @@ const int kDefaultTempo = (int)60000000 / 120;
 
 static const int kMaxTrack = 32;
 
-static void showRegistingNote(const std::vector<ScoreFilter::Note>& playing_notes) {
 #if defined(DEBUG)
+static void showRegistingNote(const std::vector<ScoreFilter::Note>& playing_notes) {
     const char* status_labels[] = {"PAUSE", "PLAY", "END"};
     for (const auto& e : playing_notes) {
         debug_printf("[%s::%s]: note:%d, velocity:%d, channel:%d -> stat:%s\n", kClassName, __func__, e.note, e.velocity, e.channel, status_labels[e.stat]);
     }
-#endif  // defined(DEBUG)
 }
+#endif  // defined(DEBUG)
 
 ScoreFilter::ScoreFilter(const String& file_name, Filter& filter)
-    : BaseFilter(filter), file_name_(file_name), score_name_(), parser_(nullptr), score_index_(0), root_tick_(kDefaultTick), playing_notes_(), play_track_flags_(~0) {
+    : BaseFilter(filter),
+      file_name_(file_name),
+      score_name_(),
+      parser_(nullptr),
+      score_index_(0),
+      root_tick_(kDefaultTick),
+      playing_notes_(),
+      play_track_flags_(~0) {
 }
 
 ScoreFilter::~ScoreFilter() {
@@ -160,7 +167,7 @@ bool ScoreFilter::setParam(int param_id, intptr_t value) {
             return true;
         }
     } else if (param_id == ScoreFilter::PARAMID_SCORE) {
-        return setScoreIndex((int)value);
+        return setScoreIndex((uint8_t)value);
     } else if (param_id == ScoreFilter::PARAMID_SCORE_NAME) {
         return false;
     } else {
@@ -180,7 +187,9 @@ bool ScoreFilter::sendNoteOff(uint8_t note, uint8_t velocity, uint8_t channel) {
         }
     }
 
+#if defined(DEBUG)
     showRegistingNote(playing_notes_);
+#endif  // defined(DEBUG)
 
     return BaseFilter::sendNoteOff(note, velocity, channel);
 }
@@ -219,7 +228,9 @@ bool ScoreFilter::sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) {
     playing_note->channel = channel;
     playing_note->stat = PLAY;
 
+#if defined(DEBUG)
     showRegistingNote(playing_notes_);
+#endif  // defined(DEBUG)
 
     return BaseFilter::sendNoteOn(note, velocity, channel);
 }
@@ -249,6 +260,10 @@ bool ScoreFilter::sendSongSelect(uint8_t song) {
 
 bool ScoreFilter::sendContinue() {
     debug_printf("[%s::%s] enter()\n", kClassName, __func__);
+    for (uint8_t ch = 0; ch < 16; ch++) {
+        BaseFilter::sendControlChange(0x7B, 0, ch + 1);
+    }
+
     for (auto& e : playing_notes_) {
         if (e.stat == PAUSE) {
             sendNoteOn(e.note, e.velocity, e.channel);
@@ -260,18 +275,22 @@ bool ScoreFilter::sendContinue() {
 
 bool ScoreFilter::sendStop() {
     debug_printf("[%s::%s] enter()\n", kClassName, __func__);
+
+    for (uint8_t ch = 0; ch < 16; ch++) {
+        BaseFilter::sendControlChange(0x7B, 0, ch + 1);
+    }
+    
     for (auto& e : playing_notes_) {
         if (e.stat == PLAY) {
-            sendNoteOff(e.note, e.velocity, e.channel);
             e.stat = PAUSE;
         }
     }
     return BaseFilter::sendStop();
 }
 
-bool ScoreFilter::sendMtcFullMessage(uint8_t hr, uint8_t mn, uint8_t sc, uint8_t fr) {
-    debug_printf("[%s::%s] enter(%d,%02d:%02d:%02d:%02d)\n", kClassName, __func__,  //
-                 (hr >> 5) & 0x03, hr & 0x1F, mn & 0x3F, sc & 0x3F, fr & 0x1F);
+bool ScoreFilter::sendMtcFullMessage(uint8_t /*hr*/, uint8_t /*mn*/, uint8_t /*sc*/, uint8_t /*fr*/) {
+    // debug_printf("[%s::%s] enter(%d,%02d:%02d:%02d:%02d)\n", kClassName, __func__,  //
+    //              (hr >> 5) & 0x03, hr & 0x1F, mn & 0x3F, sc & 0x3F, fr & 0x1F);
     return true;
 }
 

@@ -105,7 +105,7 @@ bool CorrectToneFilter::setParam(int param_id, intptr_t value) {
     }
 }
 
-bool CorrectToneFilter::sendNoteOff(uint8_t note, uint8_t velocity, uint8_t channel) {
+bool CorrectToneFilter::sendNoteOff(uint8_t note, uint8_t /*velocity*/, uint8_t channel) {
     if (ASSIGNABLE_SIZE <= note && note != NOTE_ALL) {
         error_printf("[%s::%s]: note:%d is out of number.\n", kClassName, __func__, note);
         return false;
@@ -134,7 +134,7 @@ bool CorrectToneFilter::sendNoteOff(uint8_t note, uint8_t velocity, uint8_t chan
     return true;
 }
 
-bool CorrectToneFilter::sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) {
+bool CorrectToneFilter::sendNoteOn(uint8_t note, uint8_t /*velocity*/, uint8_t channel) {
     if (ASSIGNABLE_SIZE <= note && note != NOTE_ALL) {
         error_printf("[%s::%s]: note:%d is out of number.\n", kClassName, __func__, note);
         return false;
@@ -243,6 +243,10 @@ bool CorrectToneFilter::updateNotes() {
                     break;
                 }
             }
+        } else if ((status_byte & 0xF0) == MIDI_MSG_CONTROL_CHANGE) {
+            sendControlChange(midi_message_.data_byte1, midi_message_.data_byte2, (status_byte & 0x0F) + 1);
+        } else if ((status_byte & 0xF0) == MIDI_MSG_PROGRAM_CHANGE) {
+            sendProgramChange(midi_message_.data_byte1, (status_byte & 0x0F) + 1);
         } else if (status_byte == MIDI_MSG_META_EVENT) {
             if (midi_message_.event_code == MIDI_META_SET_TEMPO) {
                 uint32_t tempo = 0;

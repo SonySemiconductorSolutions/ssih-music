@@ -38,6 +38,14 @@ void digitalWrite(uint8_t pin, uint8_t value) {
     return;
 }
 
+int analogRead(uint8_t pin) {
+    return 0;
+}
+
+void analogWrite(uint8_t pin, uint8_t value) {
+    return;
+}
+
 int isAlpha(int ch) {
     return isalpha(ch);
 }
@@ -1159,6 +1167,10 @@ err_t FrontEnd::begin(void) {
 }
 
 err_t FrontEnd::activate(void) {
+    return FRONTEND_ECODE_OK;
+}
+
+err_t FrontEnd::init(uint8_t channel_number, uint8_t bit_length, uint32_t samples_per_frame, uint8_t data_path, AsDataDest dest) {
     return FRONTEND_ECODE_OK;
 }
 

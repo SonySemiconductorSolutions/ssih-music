@@ -108,10 +108,10 @@ ssprocLib provides several instrument software samples.
                 * Button 6: Switch the sound source
                 * Button 7: Don't use
     * [OneKeySynth](/examples/OneKeySynth/README.md)
-        * It is a musical instrument that plays according to the score file when you press the button. Use button 4 ~ 5 on the LCD board.
+        * It is a musical instrument that plays according to the score file when you press the button. Use button 4 on the LCD board.
             * Button Behavior
                 * Button 4: Play the sound source according to the score file
-                * Button 5: Same as Button 4
+                * Button 5: Don't use
                 * Button 6: Don't use
                 * Button 7: Don't use
 * a musical instrument played with a microphone

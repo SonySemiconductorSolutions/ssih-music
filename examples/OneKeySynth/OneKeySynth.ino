@@ -20,9 +20,8 @@ SFZSink sink("SawLpf.sfz");
 OneKeySynthesizerFilter inst("SCORE", sink);
 
 Button button4(PIN_D04);
-Button button5(PIN_D05);
 
-int PLAY_CHANNEL = 2;
+int PLAY_CHANNEL = 1;
 
 void setup() {
     // init built-in I/O
@@ -46,14 +45,6 @@ void setup() {
 void loop() {
     if (button4.hasChanged()) {
         if (button4.isPressed()) {
-            inst.sendNoteOn(OneKeySynthesizerFilter::NOTE_ALL, DEFAULT_VELOCITY, PLAY_CHANNEL);
-        } else {
-            inst.sendNoteOff(OneKeySynthesizerFilter::NOTE_ALL, DEFAULT_VELOCITY, PLAY_CHANNEL);
-        }
-    }
-
-    if (button5.hasChanged()) {
-        if (button5.isPressed()) {
             inst.sendNoteOn(OneKeySynthesizerFilter::NOTE_ALL, DEFAULT_VELOCITY, PLAY_CHANNEL);
         } else {
             inst.sendNoteOff(OneKeySynthesizerFilter::NOTE_ALL, DEFAULT_VELOCITY, PLAY_CHANNEL);

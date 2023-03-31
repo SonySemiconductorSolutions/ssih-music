@@ -82,7 +82,7 @@ static int PrintLs(const char *path) {
     }
 }
 
-static int CommandLs(YuruInstrumentConsole *console, int argc, char *argv[]) {
+static int CommandLs(YuruInstrumentConsole * /*console*/, int argc, char *argv[]) {
     if (argc >= 2) {
         for (int i = 1; i < argc; i++) {
             int err = PrintLs(argv[i]);
@@ -96,7 +96,7 @@ static int CommandLs(YuruInstrumentConsole *console, int argc, char *argv[]) {
     }
 }
 
-static int CommandMkdir(YuruInstrumentConsole *console, int argc, char *argv[]) {
+static int CommandMkdir(YuruInstrumentConsole * /*console*/, int argc, char *argv[]) {
     SDClass sdcard = SDClass();
     sdcard.begin();
     for (int i = 1; i < argc; i++) {
@@ -107,7 +107,7 @@ static int CommandMkdir(YuruInstrumentConsole *console, int argc, char *argv[]) 
     return YuruInstrumentConfig::kNoError;
 }
 
-static int CommandRm(YuruInstrumentConsole *console, int argc, char *argv[]) {
+static int CommandRm(YuruInstrumentConsole * /*console*/, int argc, char *argv[]) {
     SDClass sdcard = SDClass();
     sdcard.begin();
     for (int i = 1; i < argc; i++) {
@@ -123,7 +123,7 @@ static int CommandRm(YuruInstrumentConsole *console, int argc, char *argv[]) {
     return YuruInstrumentConfig::kNoError;
 }
 
-static int CommandRmdir(YuruInstrumentConsole *console, int argc, char *argv[]) {
+static int CommandRmdir(YuruInstrumentConsole * /*console*/, int argc, char *argv[]) {
     SDClass sdcard = SDClass();
     sdcard.begin();
     for (int i = 1; i < argc; i++) {
@@ -139,7 +139,7 @@ static int CommandRmdir(YuruInstrumentConsole *console, int argc, char *argv[]) 
     return YuruInstrumentConfig::kNoError;
 }
 
-static int CommandCat(YuruInstrumentConsole *console, int argc, char *argv[]) {
+static int CommandCat(YuruInstrumentConsole * /*console*/, int argc, char *argv[]) {
     SDClass sdcard = SDClass();
     sdcard.begin();
     for (int i = 1; i < argc; i++) {
@@ -159,7 +159,7 @@ static int CommandCat(YuruInstrumentConsole *console, int argc, char *argv[]) {
     return YuruInstrumentConfig::kNoError;
 }
 
-static int CommandOd(YuruInstrumentConsole *console, int argc, char *argv[]) {
+static int CommandOd(YuruInstrumentConsole * /*console*/, int argc, char *argv[]) {
     SDClass sdcard = SDClass();
     sdcard.begin();
     for (int i = 1; i < argc; i++) {
@@ -237,7 +237,7 @@ static int CommandSaveConfig(YuruInstrumentConsole *console, int argc, char *arg
     return -YuruInstrumentConfig::kErrInval;
 }
 
-static int CommandListParam(YuruInstrumentConsole *console, int argc, char *argv[]) {
+static int CommandListParam(YuruInstrumentConsole *console, int /*argc*/, char * /*argv*/[]) {
     if (console == nullptr) {
         return -YuruInstrumentConfig::kErrInval;
     }
@@ -404,7 +404,7 @@ static const CommandSpec g_command_spec[] = {
     {"?",                  CommandHelp              }};
 // clang-format on
 
-static int CommandHelp(YuruInstrumentConsole *console, int argc, char *argv[]) {
+static int CommandHelp(YuruInstrumentConsole * /*console*/, int /*argc*/, char * /*argv*/[]) {
     const int kCommandSpecNum = sizeof(g_command_spec) / sizeof(g_command_spec[0]);
     for (int i = 0; i < kCommandSpecNum; i++) {
         printf("%s\n", g_command_spec[i].name);

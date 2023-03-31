@@ -54,7 +54,7 @@ static uint32_t msToByte(int ms) {
     return kPbBytePerSec * ms / 1000;
 }
 
-SDSink::SDSink(const SDSink::Item *table, size_t table_length)
+SDSink::SDSink(const SDSink::Item* table, size_t table_length)
     : NullFilter(),
       units_(),
       renderer_(kPbSampleFrq, kPbBitDepth, kPbChannelCount, kPbSampleCount, kPbCacheSize, 4),
@@ -189,7 +189,7 @@ bool SDSink::setParam(int param_id, intptr_t value) {
     return NullFilter::setParam(param_id, value);
 }
 
-bool SDSink::sendNoteOff(uint8_t note, uint8_t velocity, uint8_t channel) {
+bool SDSink::sendNoteOff(uint8_t note, uint8_t /*velocity*/, uint8_t /*channel*/) {
     if (sizeof(units_) / sizeof(units_[0]) <= note) {
         error_printf("[%s::%s] out of note number\n", kClassName, __func__);
         return false;
@@ -249,6 +249,22 @@ bool SDSink::sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) {
             update();
         }
     }
+    return true;
+}
+
+bool SDSink::sendControlChange(uint8_t ctrl_num, uint8_t /*value*/, uint8_t /*channel*/) {
+    if (0x7B <= ctrl_num && ctrl_num <= 0x7F) {
+        debug_printf("[%s::%s] All Note Off\n", kClassName, __func__);
+        for (auto& e : units_) {
+            if (e.path.length() == 0) {
+                continue;
+            }
+            renderer_.deallocateChannel(e.render_ch);
+            e.render_ch = kDeallocatedChannel;
+            e.file.close();
+        }
+    }
+
     return true;
 }
 

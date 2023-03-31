@@ -15,7 +15,7 @@
 
 #include "YuruInstrumentFilter.h"
 
-//#define DEBUG (1)
+// #define DEBUG (1)
 
 // clang-format off
 #define nop(...) do {} while (0)
@@ -35,11 +35,6 @@ static const char kClassName[] = "YuruInstrumentConfig";
 const int kMaxLineLength = 64;
 const int kBaudrate = 115200;  //< 115200bps
 const char kSectionName[] = "yurugakki";
-
-struct CommandSpec {
-    const char *name;
-    int (*func)(YuruInstrumentConfig *config, int argc, char *argv[]);
-};
 
 YuruInstrumentConfig::YuruInstrumentConfig(Filter &filter) : filter_(&filter) {
 }

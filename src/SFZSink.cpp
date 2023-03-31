@@ -109,7 +109,7 @@ static bool parseUint32(const String& str, uint32_t* out) {
         return false;
     }
     if (endptr != nullptr && endptr != strptr && *endptr == '\0') {
-        if (0 <= val && val <= UINT32_MAX) {
+        if (val <= UINT32_MAX) {
             *out = uint32_t(val);
             return true;
         }
@@ -262,6 +262,12 @@ static SFZSink::Region buildRegion(const SFZSink::OpcodeContainer& container) {
     region.lovel = container.opcode[SFZSink::kOpcodeLovel];
     region.hivel = container.opcode[SFZSink::kOpcodeHivel];
     region.sw_last = container.opcode[SFZSink::kOpcodeSwLast];
+    region.loprog = container.opcode[SFZSink::kOpcodeLoProg];
+    region.hiprog = container.opcode[SFZSink::kOpcodeHiProg];
+    region.locc0 = container.opcode[SFZSink::kOpcodeLoCC0];
+    region.hicc0 = container.opcode[SFZSink::kOpcodeHiCC0];
+    region.locc32 = container.opcode[SFZSink::kOpcodeLoCC32];
+    region.hicc32 = container.opcode[SFZSink::kOpcodeHiCC32];
     size_t offset_samples = (pcm_samples < container.opcode[SFZSink::kOpcodeOffset]) ? pcm_samples : container.opcode[SFZSink::kOpcodeOffset];
     region.offset = region.pcm_offset + offset_samples * kSampleSize;
     if (pcm_samples > 0) {
@@ -306,7 +312,9 @@ SFZSink::SFZSink(const String& sfz_path)
       regions_(),
       playback_units_(),
       renderer_(kPbSampleFrq, kPbBitDepth, kPbChannelCount, kPbSampleCount, kPbCacheSize, 4),
+      bank_(),
       volume_(0),
+      prog_num_(0),
       global_(),
       group_(),
       region_(),
@@ -353,13 +361,16 @@ bool SFZSink::begin() {
         for (size_t i = 0; i < regions_.size(); i++) {
             debug_printf(
                 "[%s::%s] %d/%d: \"%s\" "
-                "lc=%d,hc=%d lk=%d,hk=%d,sl=%d hv=%d,lv=%d o=%d,e=%d lm=%d,c=%d ls=%d,le=%d\n",
+                "lc=%d,hc=%d lk=%d,hk=%d,sl=%d lv=%d, hv=%d, lp=%d, hp=%d, lc0=%d, hc0=%d, lc32=%d, hc32=%d, o=%d,e=%d lm=%d,c=%d ls=%d,le=%d\n",
                 kClassName, __func__,                                       // [file::class]
                 (int)(i + 1), (int)regions_.size(),                         // i/N
                 regions_[i].sample.c_str(),                                 // sample
                 regions_[i].lochan, regions_[i].hichan,                     // lochan,hichan
                 regions_[i].lokey, regions_[i].hikey, regions_[i].sw_last,  // lokey,hikey,sw_last
                 regions_[i].lovel, regions_[i].hivel,                       // lovel,hivel
+                regions_[i].loprog, regions_[i].hiprog,                     // loprog,hiprog
+                regions_[i].locc0, regions_[i].hicc0,                       // locc0,hicc0
+                regions_[i].locc32, regions_[i].hicc32,                     // locc32,hicc32
                 regions_[i].offset, regions_[i].end,                        // offset,end
                 (int)regions_[i].loop_mode, regions_[i].count,              // loop_mode,count
                 regions_[i].loop_start, regions_[i].loop_end);              // loop_start,loop_end
@@ -406,7 +417,7 @@ bool SFZSink::setParam(int param_id, intptr_t value) {
     return NullFilter::setParam(param_id, value);
 }
 
-bool SFZSink::sendNoteOff(uint8_t note, uint8_t velocity, uint8_t channel) {
+bool SFZSink::sendNoteOff(uint8_t note, uint8_t /*velocity*/, uint8_t channel) {
     debug_printf("[%s::%s] (%d, %d, %d)\n", kClassName, __func__, note, velocity, channel);
     for (auto& e : playback_units_) {
         if (e.render_ch == kDeallocatedChannel) {
@@ -461,6 +472,15 @@ bool SFZSink::sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) {
         if (velocity < e.lovel || e.hivel < velocity) {
             continue;
         }
+        if (bank_.msb < e.locc0 || e.hicc0 < bank_.msb) {
+            continue;
+        }
+        if (bank_.lsb < e.locc32 || e.hicc32 < bank_.lsb) {
+            continue;
+        }
+        if (prog_num_ < e.loprog || e.hiprog < prog_num_) {
+            continue;
+        }
         region = &e;
         break;
     }
@@ -471,6 +491,32 @@ bool SFZSink::sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) {
 
     startPlayback(note, velocity, channel, region);
 
+    return true;
+}
+
+bool SFZSink::sendControlChange(uint8_t ctrl_num, uint8_t value, uint8_t channel) {
+    if (ctrl_num == 0x00) {
+        bank_.msb = value;
+    } else if (ctrl_num == 0x20) {
+        bank_.lsb = value;
+    } else if (0x7B <= ctrl_num && ctrl_num <= 0x7F) {
+        debug_printf("[%s::%s] All Note Off\n", kClassName, __func__);
+        for (auto& e : playback_units_) {
+            if (e.channel == channel) {
+                stopPlayback(&e);
+            }
+        }
+    }
+
+    return true;
+}
+
+bool SFZSink::sendProgramChange(uint8_t prog_num, uint8_t /*channel*/) {
+    debug_printf("[%s::%s] bank=%d, prog=%d\n", kClassName, __func__,    //
+                 ((bank_.msb & 0x7F) << 7) | ((bank_.lsb & 0x7F) << 0),  // bank
+                 prog_num                                                // prog
+    );
+    prog_num_ = prog_num;
     return true;
 }
 
@@ -528,6 +574,12 @@ void SFZSink::startSfz() {
         global_.opcode[kOpcodeLoopStart] = 0;
         global_.opcode[kOpcodeLoopEnd] = 0;
         global_.opcode[kOpcodeSwDefault] = INVALID_NOTE_NUMBER;
+        global_.opcode[kOpcodeLoProg] = 0;
+        global_.opcode[kOpcodeHiProg] = 127;
+        global_.opcode[kOpcodeLoCC0] = 0;
+        global_.opcode[kOpcodeHiCC0] = 127;
+        global_.opcode[kOpcodeLoCC32] = 0;
+        global_.opcode[kOpcodeHiCC32] = 127;
     }
     group_ = global_;
     region_ = group_;
@@ -576,12 +628,13 @@ void SFZSink::startHeader(const String& header) {
     }
 }
 
-void SFZSink::endHeader(const String& header) {
-    trace_printf("[%s::%s] (\"%s\")\n", kClassName, __func__, header.c_str());
+void SFZSink::endHeader(const String& /*header*/) {
+    // trace_printf("[%s::%s] (\"%s\")\n", kClassName, __func__, header.c_str());
 
     // end header
     if (header_ == kGlobal) {
         global_ = region_;
+        group_ = region_;
     } else if (header_ == kGroup) {
         group_ = region_;
     } else if (header_ == kRegion) {
@@ -626,7 +679,13 @@ void SFZSink::opcode(const String& opcode, const String& value) {
         {"sw_lokey",     kOpcodeSwLokey,     NOTE_NUMBER_MIN, NOTE_NUMBER_MAX, parseNotename},
         {"sw_hikey",     kOpcodeSwHikey,     NOTE_NUMBER_MIN, NOTE_NUMBER_MAX, parseNotename},
         {"default_path", kOpcodeDefaultPath, 0,               0,               nullptr      },
-        {"sw_default",   kOpcodeSwDefault,   NOTE_NUMBER_MIN, NOTE_NUMBER_MAX, parseNotename}
+        {"sw_default",   kOpcodeSwDefault,   NOTE_NUMBER_MIN, NOTE_NUMBER_MAX, parseNotename},
+        {"loprog",       kOpcodeLoProg,      0,               127,             parseUint32  },
+        {"hiprog",       kOpcodeHiProg,      0,               127,             parseUint32  },
+        {"locc0",        kOpcodeLoCC0,       0,               127,             parseUint32  },
+        {"hicc0",        kOpcodeHiCC0,       0,               127,             parseUint32  },
+        {"locc32",       kOpcodeLoCC32,      0,               127,             parseUint32  },
+        {"hicc32",       kOpcodeHiCC32,      0,               127,             parseUint32  }
     };
     // clang-format on
 
@@ -680,7 +739,7 @@ void SFZSink::opcode(const String& opcode, const String& value) {
     }
 }
 
-SFZSink::PlaybackUnit* SFZSink::startPlayback(uint8_t note, uint8_t velocity, uint8_t channel, Region* region) {
+SFZSink::PlaybackUnit* SFZSink::startPlayback(uint8_t note, uint8_t /*velocity*/, uint8_t channel, Region* region) {
     trace_printf("[%s::%s] (%d,%d,%d,%p))\n", kClassName, __func__, note, velocity, channel, region);
     PlaybackUnit* unit = nullptr;
     if (region == nullptr) {

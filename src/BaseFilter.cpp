@@ -61,6 +61,20 @@ bool BaseFilter::sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) {
     return next_filter_->sendNoteOn(note, velocity, channel);
 }
 
+bool BaseFilter::sendControlChange(uint8_t ctrl_num, uint8_t value, uint8_t channel) {
+    if (next_filter_ == nullptr) {
+        return false;
+    }
+    return next_filter_->sendControlChange(ctrl_num, value, channel);
+}
+
+bool BaseFilter::sendProgramChange(uint8_t prog_num, uint8_t channel) {
+    if (next_filter_ == nullptr) {
+        return false;
+    }
+    return next_filter_->sendProgramChange(prog_num, channel);
+}
+
 bool BaseFilter::sendSongPositionPointer(uint16_t beats) {
     if (next_filter_ == nullptr) {
         return false;

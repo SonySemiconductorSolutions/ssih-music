@@ -48,7 +48,7 @@ ScoreSrc::~ScoreSrc() {
 
 bool ScoreSrc::begin() {
     if (ScoreFilter::begin()) {
-        return setScoreIndex(0);
+        return sendSongSelect(0);
     }
     return false;
 }
@@ -124,7 +124,7 @@ bool ScoreSrc::setParam(int param_id, intptr_t value) {
         }
         return true;
     } else if (param_id == ScoreFilter::PARAMID_SCORE) {
-        return setScoreIndex((int)value);
+        return sendSongSelect((uint8_t)value);
     } else {
         return ScoreFilter::setParam(param_id, value);
     }
@@ -132,10 +132,13 @@ bool ScoreSrc::setParam(int param_id, intptr_t value) {
 
 bool ScoreSrc::sendSongPositionPointer(uint16_t beats) {
     debug_printf("[%s::%s] SongPositionPointer(%d)\n", kClassName, __func__, beats);
+    for (uint8_t ch = 0; ch < 16; ch++) {
+        BaseFilter::sendControlChange(0x7B, 0, ch + 1);
+    }
     if (isParserAvailable() && play_state_ != ScoreFilter::END) {
         uint32_t ticks = time_keeper_.midiBeatToTick(beats);
         if (ticks < time_keeper_.getTotalTick()) {
-            setScoreIndex(getScoreIndex());
+            sendSongSelect(getScoreIndex());
         }
         while (time_keeper_.getTotalTick() < ticks && play_state_ != ScoreFilter::END) {
             if (!is_event_available_) {
@@ -160,6 +163,9 @@ bool ScoreSrc::sendSongPositionPointer(uint16_t beats) {
 
 bool ScoreSrc::sendSongSelect(uint8_t song) {
     debug_printf("[%s::%s] SongSelect(%d)\n", kClassName, __func__, song);
+    for (uint8_t ch = 0; ch < 16; ch++) {
+        BaseFilter::sendControlChange(0x7B, 0, ch + 1);
+    }
     return setScoreIndex(song);
 }
 
@@ -207,6 +213,9 @@ bool ScoreSrc::sendMtcFullMessage(uint8_t hr, uint8_t mn, uint8_t sc, uint8_t fr
 }
 
 bool ScoreSrc::setScoreIndex(int id) {
+    for (uint8_t ch = 0; ch < 16; ch++) {
+        BaseFilter::sendControlChange(0x7B, 0, ch + 1);
+    }
     if (ScoreFilter::setScoreIndex(id)) {
         time_keeper_.reset(getRootTick(), kDefaultTempo);
         play_state_ = next_state_ = default_state_;
@@ -227,6 +236,10 @@ bool ScoreSrc::executeMidiEvent(const ScoreParser::MidiMessage& msg) {
         return sendNoteOff(msg.data_byte1, msg.data_byte2, (status_byte & 0x0F) + 1);
     } else if ((status_byte & 0xF0) == MIDI_MSG_NOTE_ON) {
         return sendNoteOn(msg.data_byte1, msg.data_byte2, (status_byte & 0x0F) + 1);
+    } else if ((status_byte & 0xF0) == MIDI_MSG_CONTROL_CHANGE) {
+        return sendControlChange(msg.data_byte1, msg.data_byte2, (status_byte & 0x0F) + 1);
+    } else if ((status_byte & 0xF0) == MIDI_MSG_PROGRAM_CHANGE) {
+        return sendProgramChange(msg.data_byte1, (status_byte & 0x0F) + 1);
     } else if (status_byte == MIDI_MSG_META_EVENT) {
         if (msg.event_code == MIDI_META_SET_TEMPO) {
             uint32_t tempo = 0;
@@ -243,7 +256,7 @@ bool ScoreSrc::executeMidiEvent(const ScoreParser::MidiMessage& msg) {
                 if (next_index >= getNumberOfScores()) {
                     next_index = 0;
                 }
-                if (setScoreIndex(next_index)) {
+                if (sendSongSelect(next_index)) {
                     next_state_ = current_state;
                 } else {
                     play_state_ = ScoreFilter::END;

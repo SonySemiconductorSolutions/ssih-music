@@ -33,11 +33,7 @@ static const int kDefaultTempo = (int)60000000 / 120;
 static OneKeySynthesizerFilter::Note kInvalidNote = {INVALID_NOTE_NUMBER, 0};
 
 OneKeySynthesizerFilter::OneKeySynthesizerFilter(const String& file_name, Filter& filter)
-    : ScoreFilter(file_name, filter),
-      play_state_(ScoreFilter::PLAY),
-      midi_message_(),
-      assigned_notes_(),
-      playing_notes_() {
+    : ScoreFilter(file_name, filter), play_state_(ScoreFilter::PLAY), midi_message_(), assigned_notes_(), playing_notes_() {
     memset(&midi_message_, 0x00, sizeof(midi_message_));
     for (auto& notes : assigned_notes_) {
         for (auto& e : notes) {
@@ -85,7 +81,7 @@ bool OneKeySynthesizerFilter::setParam(int param_id, intptr_t value) {
     }
 }
 
-bool OneKeySynthesizerFilter::sendNoteOff(uint8_t note, uint8_t velocity, uint8_t channel) {
+bool OneKeySynthesizerFilter::sendNoteOff(uint8_t note, uint8_t /*velocity*/, uint8_t channel) {
     if (ASSIGNABLE_SIZE <= note && note != NOTE_ALL) {
         error_printf("[%s::%s]: note:%d is out of number.\n", kClassName, __func__, note);
         return false;
@@ -114,7 +110,7 @@ bool OneKeySynthesizerFilter::sendNoteOff(uint8_t note, uint8_t velocity, uint8_
     return true;
 }
 
-bool OneKeySynthesizerFilter::sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) {
+bool OneKeySynthesizerFilter::sendNoteOn(uint8_t note, uint8_t /*velocity*/, uint8_t channel) {
     if (ASSIGNABLE_SIZE <= note && note != NOTE_ALL) {
         error_printf("[%s::%s]: note:%d is out of number.\n", kClassName, __func__, note);
         return false;

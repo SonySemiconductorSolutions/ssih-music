@@ -45,7 +45,7 @@ static FrontEnd* g_frontend = FrontEnd::getInstance();
 static VoiceCapture* g_voice_capture = nullptr;
 
 static const char kRecordFilePath[] = "Sound.raw";
-static const int kFramePerSecond = 64;           // 256Sa * 64 / 16khz = 1.024sec
+static const int kFramePerSecond = CAP_SAMPLING_FREQ / CAP_FRAME_LENGTH;
 static const int kDefaultRecordingSeconds = 60;  // 1min
 
 #if 0
@@ -87,7 +87,7 @@ bool VoiceCapture::Recorder::start() {
         file_.close();
     }
     if (buffer_ == nullptr) {
-        buffer_ = new uint8_t[CAP_BLK_SIZE * kFramePerSecond];
+        buffer_ = new uint8_t[CAP_BLOCK_SIZE * kFramePerSecond];
     }
 
     SDClass sdcard;
@@ -118,7 +118,7 @@ bool VoiceCapture::Recorder::end() {
     }
 
     if (state_ == RECORDER_STATE_RECORDING) {
-        file_.write(buffer_, CAP_BLK_SIZE * frame_index_);
+        file_.write(buffer_, CAP_BLOCK_SIZE * frame_index_);
     } else if (state_ == RECORDER_STATE_FULL) {
         flush();
     }
@@ -133,7 +133,7 @@ bool VoiceCapture::Recorder::end() {
 
 void VoiceCapture::Recorder::writeFrame(void* buffer) {
     if (state_ == RECORDER_STATE_RECORDING) {
-        memcpy(&buffer_[CAP_BLK_SIZE * frame_index_], buffer, CAP_BLK_SIZE);
+        memcpy(&buffer_[CAP_BLOCK_SIZE * frame_index_], buffer, CAP_BLOCK_SIZE);
         frame_index_++;
         if (kFramePerSecond <= frame_index_) {
             state_ = RECORDER_STATE_FULL;
@@ -143,7 +143,7 @@ void VoiceCapture::Recorder::writeFrame(void* buffer) {
 
 void VoiceCapture::Recorder::flush() {
     if (state_ == RECORDER_STATE_FULL) {
-        file_.write(buffer_, CAP_BLK_SIZE * frame_index_);
+        file_.write(buffer_, CAP_BLOCK_SIZE * frame_index_);
         frame_index_ = 0;
         seconds_++;
         if (seconds_ < recording_time_) {
@@ -246,26 +246,26 @@ bool VoiceCapture::begin() {
         return false;
     }
 
-#if 0
+#if MIC_SAMPLING_FREQ == CAP_SAMPLING_FREQ
+    // through input
     debug_printf("[%s::%s] FrontEnd::init\n", kClassName, __func__);
-    err = g_frontend->init(AS_CHANNEL_MONO, AS_BITLENGTH_16,
-                           CAP_SAMPLE_CNT * 3,  // H/W-in:48KHz SRC-out:16KHz
-                           AsDataPathCallback, callback, AsMicFrontendPreProcSrc, "/mnt/sd0/BIN/SRC");
+    err = g_frontend->init(AS_CHANNEL_MONO, AS_BITLENGTH_16, MIC_FRAME_LENGTH, AsDataPathCallback, callback);
     if (err != FRONTEND_ECODE_OK) {
         error_printf("[%s::%s] error: failed FrontEnd.init => %d\n", kClassName, __func__, err);
         return false;
     }
-#else
+#else   // MIC_SAMPLING_FREQ == CAP_SAMPLING_FREQ
+    // enable SRC
     debug_printf("[%s::%s] AS_InitMicFrontend\n", kClassName, __func__);
     AsInitMicFrontendParam frontend_init;
     frontend_init.channel_number = AS_CHANNEL_MONO;
     frontend_init.bit_length = AS_BITLENGTH_16;
-    frontend_init.samples_per_frame = CAP_SAMPLE_CNT * 3;
+    frontend_init.samples_per_frame = MIC_FRAME_LENGTH;
     frontend_init.preproc_type = AsMicFrontendPreProcSrc;
     strncpy(frontend_init.dsp_path, "/mnt/sd0/BIN/SRC", sizeof(frontend_init.dsp_path));
     frontend_init.data_path = AsDataPathCallback;
     frontend_init.dest = callback;
-    frontend_init.out_fs = AS_SAMPLINGRATE_16000;
+    frontend_init.out_fs = CAP_SAMPLING_FREQ;
     ok = AS_InitMicFrontend(&frontend_init);
     if (!ok) {
         error_printf("error: failed AS_InitMicFrontend => %d\n", ok);
@@ -277,7 +277,7 @@ bool VoiceCapture::begin() {
         error_printf("error: failed AS_ReceiveObjectReply => %d\n", ok);
         return false;
     }
-#endif
+#endif  // MIC_SAMPLING_FREQ == CAP_SAMPLING_FREQ
 
     debug_printf("[%s::%s] FrontEnd::setMicGain\n", kClassName, __func__);
     err = g_frontend->setMicGain(gain_);
@@ -300,7 +300,7 @@ bool VoiceCapture::begin() {
 
 void VoiceCapture::update() {
     bool has_result = false;
-    VoiceCapture::Result analyze_result = {0};
+    VoiceCapture::Result analyze_result = {0, 0, 0, 0, 0, 0};
 
     recorder_.flush();
 
@@ -394,27 +394,27 @@ bool RecodeVoiceCapture::onMicFrontend(AsMicFrontendEvent evtype, uint32_t resul
 #endif
 
 void VoiceCapture::onFrontendDone(AsPcmDataParam param) {
-    static uint8_t buffer[CAP_BLK_SIZE];   //< referenced from SubCore
-    static VoiceCapture::Capture capture;  //< referenced from SubCore
+    static uint8_t buffer[CAP_BLOCK_SIZE];  //< referenced from SubCore
+    static VoiceCapture::Capture capture;   //< referenced from SubCore
 
     ledOn(LED0);
 
-    if (param.size == CAP_BLK_SIZE) {
+    if (param.size > 0) {
         memcpy(buffer, param.mh.getPa(), param.size);
         capture.data = buffer;
-        capture.data = param.mh.getPa();  // SRC適応後のdataが入っている
+        capture.data = param.mh.getPa();
 
         recorder_.writeFrame(&buffer);
 
-        capture.sample_size = 2;
-        capture.channel = 1;
-        capture.fs = CAP_SAMPLE_FRQ;
+        capture.sample_size = CAP_BYTE_WIDTH;
+        capture.channel = CAP_CHANNELS;
+        capture.fs = CAP_SAMPLING_FREQ;
         capture.size = param.size;
 
         if (CAP_BYTE_WIDTH == 2) {
             if (input_level_ != 100) {
                 int16_t* data = (int16_t*)capture.data;
-                int n = CAP_SAMPLE_CNT / sizeof(data[0]);
+                int n = CAP_FRAME_LENGTH / sizeof(data[0]);
                 float ratio = (float)input_level_ / 100.0;
                 for (int i = 0; i < n; i++) {
                     data[i] *= ratio;

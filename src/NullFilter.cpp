@@ -49,11 +49,19 @@ bool NullFilter::sendNoteOn(uint8_t, uint8_t, uint8_t) {
     return false;
 }
 
-bool NullFilter::sendSongPositionPointer(uint16_t beats) {
+bool NullFilter::sendControlChange(uint8_t, uint8_t, uint8_t) {
+    return false;
+}
+
+bool NullFilter::sendProgramChange(uint8_t, uint8_t) {
+    return false;
+}
+
+bool NullFilter::sendSongPositionPointer(uint16_t /*beats*/) {
     return true;
 }
 
-bool NullFilter::sendSongSelect(uint8_t song) {
+bool NullFilter::sendSongSelect(uint8_t /*song*/) {
     return true;
 }
 
@@ -78,7 +86,11 @@ bool NullFilter::sendMidiMessage(uint8_t* msg, size_t length) {
     if (msg == nullptr || length == 0) {
         return false;
     }
-    if (msg[0] == MIDI_MSG_SONG_POSITION_POINTER && length >= MIDI_MSGLEN_SONG_POSITION_POINTER) {
+    if ((msg[0] & 0xF0) == MIDI_MSG_CONTROL_CHANGE && length >= MIDI_MSGLEN_CONTROL_CHANGE) {
+        return sendControlChange(msg[1], msg[2], (msg[0] & 0x0F) + 1);
+    } else if ((msg[0] & 0xF0) == MIDI_MSG_PROGRAM_CHANGE && length >= MIDI_MSGLEN_PROGRAM_CHANGE) {
+        return sendProgramChange(msg[1], (msg[0] & 0x0F) + 1);
+    } else if (msg[0] == MIDI_MSG_SONG_POSITION_POINTER && length >= MIDI_MSGLEN_SONG_POSITION_POINTER) {
         return sendSongPositionPointer(((msg[2] & 0x7F) << 7) | ((msg[1] & 0x7F) << 0));
     } else if (msg[0] == MIDI_MSG_SONG_SELECT && length >= MIDI_MSGLEN_SONG_SELECT) {
         return sendSongSelect(msg[1] & 0x7F);

@@ -4,6 +4,9 @@
  * Copyright 2022 Sony Semiconductor Solutions Corporation
  */
 
+/**
+ * @file SmfParser.h
+ */
 #ifndef SMF_PARSER_H_
 #define SMF_PARSER_H_
 
@@ -16,6 +19,9 @@
 #include "ScoreParser.h"
 #include "YuruInstrumentFilter.h"
 
+/**
+ * @brief @~japanese スタンダードMIDIファイルファイルを入力とする ScoreParser です。
+ */
 class SmfParser : public ScoreParser {
 public:
     struct Track {
@@ -65,7 +71,12 @@ public:
         bool at_eot_;
     };
 
+    /**
+     * @brief @~japanese SmfParser オブジェクトを生成します。
+     * @param[in] path @~japanese スタンダードMIDIファイル(.mid)のパスを指定します。
+     */
     SmfParser(const String& path);
+
     virtual ~SmfParser();
 
     uint16_t getRootTick() override;
@@ -73,8 +84,7 @@ public:
     int getNumberOfScores() override;
     bool loadScore(int id) override;
     String getTitle(int id) override;
-
-    bool getMidiMessage(MidiMessage* midi_message) override;
+    bool getMidiMessage(ScoreParser::MidiMessage* msg) override;
 
 private:
     // SMF tracks

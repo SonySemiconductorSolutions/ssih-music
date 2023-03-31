@@ -317,8 +317,8 @@ int SmfParser::getNumberOfScores() {
     }
 }
 
-bool SmfParser::loadScore(int id) {
-    debug_printf("[%s::%s] file=%s id=%d mtrks=%d mask=%08X\n", kClassName, __func__, file_.name(), id, (int)tracks_.size(), getPlayTrack());
+bool SmfParser::loadScore(int /*id*/) {
+    debug_printf("[%s::%s] file=%s mtrks=%d mask=%08X\n", kClassName, __func__, file_.name(), (int)tracks_.size(), getPlayTrack());
     parsers_.clear();
     for (size_t i = 0; i < tracks_.size(); i++) {
         parsers_.push_back(TrackParser(&file_, tracks_[i].offset, tracks_[i].size));

@@ -38,9 +38,8 @@ SFZSink sink("SawLpf.sfz");                         // SFZ音源ファイルの�
 OneKeySynthesizerFilter inst("score.mid", sink);    // 楽譜ファイルを読み込むモジュールです。再生する楽譜ファイルを指定します。
 
 Button button4(PIN_D04);
-Button button5(PIN_D05);
 
-int PLAY_CHANNEL = 2;                               // 楽譜ファイルの中でチャンネル番号2を演奏対象とする
+int PLAY_CHANNEL = 1;                               // 楽譜ファイルの中でチャンネル番号1を演奏対象とする
 
 void setup() {
     inst.begin();                                                       // 楽器を初期化する
@@ -51,14 +50,6 @@ void loop() {
         if (button4.isPressed()) {                                      // ボタン4が押されたら、楽譜の次の音を鳴らす
             inst.sendNoteOn(OneKeySynthesizerFilter::NOTE_ALL, DEFAULT_VELOCITY, PLAY_CHANNEL);
         } else {                                                        // ボタン4が離されたら、鳴らしていた音を止める
-            inst.sendNoteOff(OneKeySynthesizerFilter::NOTE_ALL, DEFAULT_VELOCITY, PLAY_CHANNEL);
-        }
-    }
-
-    if (button5.hasChanged()) {
-        if (button5.isPressed()) {                                      // ボタン5が押されたら、楽譜の次の音を鳴らす
-            inst.sendNoteOn(OneKeySynthesizerFilter::NOTE_ALL, DEFAULT_VELOCITY, PLAY_CHANNEL);
-        } else {                                                        // ボタン5が離されたら、鳴らしていた音を止める
             inst.sendNoteOff(OneKeySynthesizerFilter::NOTE_ALL, DEFAULT_VELOCITY, PLAY_CHANNEL);
         }
     }
@@ -80,12 +71,12 @@ void loop() {
 一般にMIDIファイルは複数の演奏パートの演奏情報を含んでいます。
 `OneKeySynthesizerFilter`は、`sendNoteOn`関数で指定したチャンネル番号の音を1つ読み進めるので、演奏対象のチャンネル番号をあらかじめ調べておく必要があります。
 演奏パートにどのチャンネル番号が割り当てられているかは、DAWでMIDIファイルを開くと確認することができます。
-ここでは演奏したいパートにチャンネル番号2が割り当てられていることとします。
+ここでは演奏したいパートにチャンネル番号1が割り当てられていることとします。
 
 チャンネル番号は以下のように設定します。
 
 ```OneKeySynth.ino
-int PLAY_CHANNEL = 2;                                                   // 楽譜ファイルの中でチャンネル番号2を演奏対象とする
+int PLAY_CHANNEL = 1;                                                   // 楽譜ファイルの中でチャンネル番号1を演奏対象とする
 ```
 
 ## インストール
@@ -103,5 +94,5 @@ int PLAY_CHANNEL = 2;                                                   // 楽�
 
 ## 演奏方法
 
-Mic&LCD KIT for SPRESENSEのボタン4(またはボタン5)を押すと、楽譜の音を1つずつ読み進めながら音を鳴らします。
+Mic&LCD KIT for SPRESENSEのボタン4を押すと、楽譜の音を1つずつ読み進めながら音を鳴らします。
 曲のリズムでボタンを押すと正しく曲が演奏できます。
