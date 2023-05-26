@@ -948,7 +948,7 @@ void registerDummyFile(const String &path, const uint8_t *content, int size) {
 }
 
 File::File(const char *name, uint8_t mode)
-    : name_(nullptr), fp_(nullptr), size_(0), curpos_(0), binary_data_(nullptr), is_directory_(false), dummy_index_(0), dummy_smf_index_(0) {
+    : name_(nullptr), mode_(mode), fp_(nullptr), size_(0), curpos_(0), dummy_file_content_(nullptr), is_directory_(false), dummy_files_index_(0) {
     // printf("%s:%d:%s(%s,%u)\n", __FILE__, __LINE__, __func__, name, mode);
     if (!name) {
         return;
@@ -956,16 +956,18 @@ File::File(const char *name, uint8_t mode)
     int index = 0;
     for (const auto &e : g_dummy_files) {
         if (e.path == name) {
-            binary_data_ = new uint8_t[e.size];
-            memcpy(binary_data_, e.content, e.size);
             name_ = strdup(name);
             size_ = e.size;
             curpos_ = 0;
-            dummy_smf_index_ = index;
+            dummy_file_content_ = new uint8_t[e.size];
+            if (dummy_file_content_) {
+                memcpy(dummy_file_content_, e.content, e.size);
+            }
+            dummy_files_index_ = index;
             return;
         } else if (e.path.startsWith(name)) {
             is_directory_ = true;
-            dummy_smf_index_ = index;
+            dummy_files_index_ = index;
             return;
         }
         index++;
@@ -991,20 +993,89 @@ File::File(const char *name, uint8_t mode)
     }
 }
 
-File::File(void) : name_(nullptr), fp_(nullptr), size_(0), curpos_(0) {
+File::File(void)
+    : name_(nullptr), mode_(FILE_READ), fp_(nullptr), size_(0), curpos_(0), dummy_file_content_(nullptr), is_directory_(false), dummy_files_index_(0) {
     // printf("%s:%d:%s()\n", __FILE__, __LINE__, __func__);
+}
+
+File::File(const File &lhs) : File(lhs.name_, lhs.mode_) {
 }
 
 File::~File(void) {
     // printf("%s:%d:%s()\n", __FILE__, __LINE__, __func__);
     if (fp_) {
-        // fclose(m_fp);
+        fclose(fp_);
         fp_ = nullptr;
     }
     if (name_) {
-        // free(name_);
+        free(name_);
         name_ = nullptr;
     }
+    if (dummy_file_content_) {
+        delete[] dummy_file_content_;
+        dummy_file_content_ = nullptr;
+    }
+}
+
+File &File::operator=(const File &lhs) {
+    const char *name = lhs.name_;
+    uint8_t mode = lhs.mode_;
+
+    if (fp_) {
+        fclose(fp_);
+        fp_ = nullptr;
+    }
+    if (name_) {
+        free(name_);
+        name_ = nullptr;
+    }
+    if (dummy_file_content_) {
+        delete[] dummy_file_content_;
+        dummy_file_content_ = nullptr;
+    }
+
+    if (!name) {
+        return *this;
+    }
+    int index = 0;
+    for (const auto &e : g_dummy_files) {
+        if (e.path == name) {
+            name_ = strdup(name);
+            size_ = e.size;
+            curpos_ = 0;
+            dummy_file_content_ = new uint8_t[e.size];
+            if (dummy_file_content_) {
+                memcpy(dummy_file_content_, e.content, e.size);
+            }
+            dummy_files_index_ = index;
+            return *this;
+        } else if (e.path.startsWith(name)) {
+            is_directory_ = true;
+            dummy_files_index_ = index;
+            return *this;
+        }
+        index++;
+    }
+
+    if (mode == FILE_READ) {
+        fp_ = fopen(name, "rb");
+        if (fp_) {
+            name_ = strdup(name);
+            fseek(fp_, 0, SEEK_END);
+            size_ = ftell(fp_);
+            fseek(fp_, 0, SEEK_SET);
+            curpos_ = ftell(fp_);
+        }
+    } else if (mode == FILE_WRITE) {
+        fp_ = fopen(name, "wb");
+        if (fp_) {
+            name_ = strdup(name);
+            fseek(fp_, 0, SEEK_SET);
+            size_ = 0;
+            curpos_ = ftell(fp_);
+        }
+    }
+    return *this;
 }
 
 size_t File::write(uint8_t val) {
@@ -1036,18 +1107,11 @@ size_t File::write(const uint8_t *buf, size_t len) {
 int File::read(void) {
     // printf("%s:%d:%s()\n", __FILE__, __LINE__, __func__);
     size_t ret = -1;
-    if (content_.length() > 0) {
+    if (dummy_file_content_ != nullptr && 0 < size()) {
         if (curpos_ >= size_) {
             return -1;
         }
-        return (int)((unsigned char)content_[curpos_++]);
-    }
-
-    if (binary_data_ != nullptr && 0 < size()) {
-        if (curpos_ >= size_) {
-            return -1;
-        }
-        return (int)((unsigned char)binary_data_[curpos_++]);
+        return (int)((unsigned char)dummy_file_content_[curpos_++]);
     }
     uint8_t data = 0;
     if (fp_) {
@@ -1063,17 +1127,11 @@ int File::read(void) {
 int File::peek(void) {
     // printf("%s:%d:%s()\n", __FILE__, __LINE__, __func__);
     size_t ret = -1;
-    if (content_.length() > 0) {
+    if (dummy_file_content_ != nullptr && 0 < size()) {
         if (curpos_ >= size_) {
             return -1;
         }
-        return (int)((unsigned char)content_[curpos_]);
-    }
-    if (binary_data_ != nullptr && 0 < size()) {
-        if (curpos_ >= size_) {
-            return -1;
-        }
-        return (int)((unsigned char)binary_data_[curpos_]);
+        return (int)((unsigned char)dummy_file_content_[curpos_]);
     }
 
     uint8_t data = 0;
@@ -1090,10 +1148,7 @@ int File::peek(void) {
 
 int File::available(void) {
     // printf("%s:%d:%s()\n", __FILE__, __LINE__, __func__);
-    if (content_.length() > 0) {
-        return size() - position();
-    }
-    if (binary_data_ != nullptr && 0 < size()) {
+    if (dummy_file_content_ != nullptr && 0 < size()) {
         return size() - position();
     }
     if (fp_) {
@@ -1112,21 +1167,12 @@ void File::flush(void) {
 int File::read(void *buf, size_t len) {
     // printf("%s:%d:%s(%p,%u)\n", __FILE__, __LINE__, __func__, buf, len);
     size_t ret = -1;
-    if (content_.length() > 0) {
+    if (dummy_file_content_ != nullptr && 0 < size()) {
         if (buf == nullptr) {
             return ret;
         }
         ret = (len < (size_t)available()) ? len : available();
-        memcpy(buf, content_.c_str() + curpos_, ret);
-        curpos_ += ret;
-        return ret;
-    }
-    if (binary_data_ != nullptr && 0 < size()) {
-        if (buf == nullptr) {
-            return ret;
-        }
-        ret = (len < (size_t)available()) ? len : available();
-        memcpy(buf, binary_data_ + curpos_, ret);
+        memcpy(buf, dummy_file_content_ + curpos_, ret);
         curpos_ += ret;
         return ret;
     }
@@ -1141,12 +1187,7 @@ int File::read(void *buf, size_t len) {
 
 boolean File::seek(uint32_t pos) {
     // printf("%s:%d:%s(%u)\n", __FILE__, __LINE__, __func__, pos);
-    if (content_.length() > 0) {
-        curpos_ = (pos < size_) ? pos : size();
-        return true;
-    }
-
-    if (binary_data_ != nullptr && 0 < size()) {
+    if (dummy_file_content_ != nullptr && 0 < size()) {
         curpos_ = (pos < size_) ? pos : size();
         return true;
     }
@@ -1184,10 +1225,7 @@ File::operator bool(void) {
     if (isDirectory()) {
         return true;
     }
-    if (content_.length() > 0) {
-        return true;
-    }
-    if (binary_data_ != nullptr && 0 < size()) {
+    if (dummy_file_content_ != nullptr && 0 < size()) {
         return true;
     }
     if (fp_) {
@@ -1203,21 +1241,24 @@ char *File::name(void) {
 
 boolean File::isDirectory(void) {
     // printf("%s:%d:%s()\n", __FILE__, __LINE__, __func__);
-    return is_directory_;
+    if (dummy_file_content_ != nullptr && 0 < size()) {
+        return is_directory_;
+    }
+    struct stat st;
+    if (::stat(name_, &st) == 0) {
+        if ((st.st_mode & S_IFMT) == S_IFDIR) {
+            return true;
+        }
+    }
+    return false;
 }
 
 File File::openNextFile(uint8_t mode) {
     // printf("%s:%d:%s(%u)\n", __FILE__, __LINE__, __func__, mode);
     if (isDirectory()) {
-        for (long long unsigned int i = dummy_index_ + 1; i < g_dummy_files.size(); i++) {
+        for (long long unsigned int i = dummy_files_index_ + 1; i < g_dummy_files.size(); i++) {
             if (g_dummy_files[i].path.startsWith(name_)) {
-                dummy_index_ = i;
-                return File(g_dummy_files[i].path.c_str(), mode);
-            }
-        }
-        for (long long unsigned int i = dummy_smf_index_ + 1; i < g_dummy_files.size(); i++) {
-            if (g_dummy_files[i].path.startsWith(name_)) {
-                dummy_smf_index_ = i;
+                dummy_files_index_ = i;
                 return File(g_dummy_files[i].path.c_str(), mode);
             }
         }
