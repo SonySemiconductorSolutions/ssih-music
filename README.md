@@ -34,6 +34,9 @@ See the [tutorial](/docs/Tutorial.en.md) for how to use this library.
 | v1.2.0     | 2023-03-31  | (機能追加) MIDIのProgram ChangeメッセージとControl Changeメッセージに対応しました。                                                             |
 |            |             | (ドキュメント) API仕様のコメント(日本語)を追加しました。                                                                                        |
 |            |             | (ドキュメント) サンプルスケッチでスタンダードMIDIファイルを使う場合の注意事項を記載しました。examples/MusicBox/README.mdを参照してください。    |
+| v1.3.0     | 2023-05-26  | (ツール) 楽譜ファイルを扱うモジュールのユニットテストを追加しました。これに伴ってテスト用スタブの機能拡張と不具合修正を行いました。             |
+|            |             | (ドキュメント) サンプルスケッチでスタンダードMIDIファイルを使う場合の注意事項を記載しました。examples/MusicBox/README.mdを参照してください。    |
+|            |             | (その他) Spresense Reference Board バージョン 3.0.0 での動作確認を行いました。                                                                  |
 
 ## ライブラリ概要
 
