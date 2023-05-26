@@ -395,6 +395,12 @@ bool SFZSink::isAvailable(int param_id) {
     trace_printf("[%s::%s] (%d)\n", kClassName, __func__, param_id);
     if (param_id == Filter::PARAMID_OUTPUT_LEVEL) {
         return true;
+    } else if (param_id == SFZSink::PARAMID_SW_LAST) {
+        return true;
+    } else if (param_id == SFZSink::PARAMID_SW_LOKEY) {
+        return true;
+    } else if (param_id == SFZSink::PARAMID_SW_HIKEY) {
+        return true;
     }
     return NullFilter::isAvailable(param_id);
 }
@@ -403,6 +409,12 @@ intptr_t SFZSink::getParam(int param_id) {
     trace_printf("[%s::%s] (%d)\n", kClassName, __func__, param_id);
     if (param_id == Filter::PARAMID_OUTPUT_LEVEL) {
         return volume_;
+    } else if (param_id == SFZSink::PARAMID_SW_LAST) {
+        return sw_last_;
+    } else if (param_id == SFZSink::PARAMID_SW_LOKEY) {
+        return sw_lokey_;
+    } else if (param_id == SFZSink::PARAMID_SW_HIKEY) {
+        return sw_hikey_;
     }
     return NullFilter::getParam(param_id);
 }
@@ -413,7 +425,11 @@ bool SFZSink::setParam(int param_id, intptr_t value) {
         volume_ = constrain(value, -1020, 120);
         renderer_.setVolume(volume_, 0, 0);
         return true;
+    } else if (param_id == SFZSink::PARAMID_SW_LAST) {
+        sw_last_ = (uint8_t)value;
+        return true;
     }
+
     return NullFilter::setParam(param_id, value);
 }
 

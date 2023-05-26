@@ -164,8 +164,8 @@ bool ScoreFilter::setParam(int param_id, intptr_t value) {
         play_track_flags_ = value;
         if (parser_) {
             parser_->setPlayTrack((uint32_t)value);
-            return true;
         }
+        return true;
     } else if (param_id == ScoreFilter::PARAMID_SCORE) {
         return setScoreIndex((uint8_t)value);
     } else if (param_id == ScoreFilter::PARAMID_SCORE_NAME) {
@@ -279,7 +279,7 @@ bool ScoreFilter::sendStop() {
     for (uint8_t ch = 0; ch < 16; ch++) {
         BaseFilter::sendControlChange(0x7B, 0, ch + 1);
     }
-    
+
     for (auto& e : playing_notes_) {
         if (e.stat == PLAY) {
             e.stat = PAUSE;

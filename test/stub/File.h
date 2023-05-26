@@ -24,6 +24,10 @@ private:
     unsigned long size_;
     unsigned long curpos_;
     String content_;
+    uint8_t *binary_data_;
+    bool is_directory_;
+    int dummy_index_;
+    int dummy_smf_index_;
 
 public:
     File(const char *name, uint8_t mode = FILE_READ);
@@ -48,5 +52,6 @@ public:
 };
 
 void registerDummyFile(const String &path, const String &content);
+void registerDummyFile(const String &path, const uint8_t* content, int size);
 
 #endif  // DUMMY_FILE_H_

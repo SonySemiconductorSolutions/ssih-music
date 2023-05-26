@@ -18,10 +18,9 @@
 #include "SFZSink.h"
 
 #define TEST_DISABLED(test_suite_name, test_name) void test_suite_name##test_name()
-#define TEST_F_DISABLED(test_fixture, test_name) void test_suite_name##test_name()
 
-void create_file(const String &file_path, const String &text) {
-    registerDummyFile(file_path, text);
+static void create_file(const String& file_path, const String& text) {
+    registerDummyFile(file_path, (uint8_t*)text.c_str(), text.length());
 }
 
 class TestHandler : public SFZHandler {

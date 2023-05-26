@@ -67,6 +67,8 @@ int isWhitespace(int ch);
 // Time
 
 uint64_t millis(void);
+uint64_t getTime(void);
+void setTime(uint64_t time);
 
 // Characters
 

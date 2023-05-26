@@ -25,6 +25,12 @@
  */
 class SFZSink : public NullFilter, public SFZHandler {
 public:
+    enum ParamId {  // MAGIC CHAR = 'Z'
+        PARAMID_SW_LAST = ('Z' << 8),
+        PARAMID_SW_LOKEY,
+        PARAMID_SW_HIKEY
+    };
+
     enum Header { kInvalidHeader, kGlobal, kGroup, kControl, kRegion };
     enum Opcode {
         kOpcodeSample,

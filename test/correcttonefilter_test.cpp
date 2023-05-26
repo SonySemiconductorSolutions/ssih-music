@@ -50,9 +50,43 @@ public:
     }
 };
 
-// 1. text
-TEST(ScoreSrc, ScoreSrc1) {
+TEST(CorrectToneFilter, ParameterAvailability) {
     DummyFilter f;
+    CorrectToneFilter inst("NOEXIST", f);
+
+    EXPECT_FALSE(inst.begin());
+    inst.update();
+
+    // unused param
+    EXPECT_FALSE(inst.isAvailable(YuruhornSrc::PARAMID_PLAY_BUTTON_ENABLE));
+    EXPECT_FALSE(inst.setParam(YuruhornSrc::PARAMID_PLAY_BUTTON_ENABLE, 1));
+    EXPECT_EQ(0, inst.getParam(YuruhornSrc::PARAMID_PLAY_BUTTON_ENABLE));
+
+    inst.update();
+}
+
+TEST(CorrectToneFilter, ChannelRange) {
+    create_file("testdata/SCORE/textscore1.txt",
+                "#MUSIC_TITLE:test score1\n"
+                "#MUSIC_START\n"
+                "60,-1,,;\n"
+                "#MUSIC_END\n"
+                "");
+    DummyFilter f;
+    CorrectToneFilter inst("testdata/SCORE/textscore1.txt", f);
+
+    EXPECT_TRUE(inst.begin());
+    inst.update();
+
+    EXPECT_FALSE(inst.sendNoteOn(8, 0, 1));
+    EXPECT_FALSE(inst.sendNoteOff(8, 0, 1));
+    EXPECT_FALSE(inst.sendNoteOn(0, 0, 0));
+    EXPECT_FALSE(inst.sendNoteOff(0, 0, 0));
+    EXPECT_FALSE(inst.sendNoteOn(0, 0, 17));
+    EXPECT_FALSE(inst.sendNoteOff(0, 0, 17));
+}
+
+TEST(CorrectToneFilter, CorrectToneTest1) {
     create_file("testdata/SCORE_LIST/textscore3.txt",
                 "#MUSIC_TITLE:test score3\n"
                 "#MUSIC_RHYTHM:1\n"
@@ -65,7 +99,8 @@ TEST(ScoreSrc, ScoreSrc1) {
                 "64,-1,,;\n"
                 "#MUSIC_END\n"
                 "");
-    ScoreSrc inst("testdata/SCORE_LIST/textscore3.txt", f);
+    DummyFilter f;
+    CorrectToneFilter inst("testdata/SCORE_LIST/textscore3.txt", f);
 
     setTime(0);
 
@@ -77,24 +112,19 @@ TEST(ScoreSrc, ScoreSrc1) {
     int count = 0;
     while (count < 1000) {
         inst.update();
+        EXPECT_TRUE(inst.sendNoteOn(0, 0, 1));
+        EXPECT_TRUE(inst.sendNoteOff(0, 0, 1));
         count++;
         if (inst.getParam(ScoreSrc::PARAMID_STATUS) == ScoreFilter::END) {
             break;
-        }
-        if (count % 100 == 0 && count != 0) {
-            if (inst.getParam(ScoreSrc::PARAMID_STATUS) == ScoreFilter::PLAY) {
-                EXPECT_TRUE(inst.setParam(ScoreSrc::PARAMID_STATUS, ScoreFilter::PAUSE));
-            } else if (inst.getParam(ScoreSrc::PARAMID_STATUS) == ScoreFilter::PAUSE) {
-                EXPECT_TRUE(inst.setParam(ScoreSrc::PARAMID_STATUS, ScoreFilter::PLAY));
-            }
         }
     }
     EXPECT_LT(1600, getTime());
     EXPECT_GT(5000, getTime());
 }
 
-// 2. MIDI
-TEST(ScoreSrc, ScoreSrc2) {
+// MIDI
+TEST(CorrectToneFilter, CorrectToneTest2) {
     uint8_t smf_data[] = {0x4D, 0x54, 0x68, 0x64,                                                              // "MThd"
                           0x00, 0x00, 0x00, 0x06,                                                              // length = 6
                           0x00, 0x01,                                                                          // format = 1
@@ -118,7 +148,7 @@ TEST(ScoreSrc, ScoreSrc2) {
                           0x00, 0xFF, 0x2F, 0x00};                                                             // [     0] End of Track
     create_file("testdata/SCORE/smfscore4.mid", smf_data, sizeof(smf_data) / sizeof(smf_data[0]));
     DummyFilter f;
-    ScoreSrc inst("testdata/SCORE/smfscore4.mid", f);
+    CorrectToneFilter inst("testdata/SCORE/smfscore4.mid", f);
 
     setTime(0);
 
@@ -135,11 +165,12 @@ TEST(ScoreSrc, ScoreSrc2) {
             break;
         }
     }
+    EXPECT_GE(1000, count);
     EXPECT_GT(1500, getTime());
 }
 
-// 3. playlist & continuous playback
-TEST(ScoreSrc, ScoreSrc3) {
+// playlist & continuous playback
+TEST(CorrectToneFilter, CorrectToneTest3) {
     create_file("testdata/SCORE/textscore1.txt",
                 "#MUSIC_TITLE:test score1\n"
                 "#MUSIC_START\n"
@@ -165,7 +196,7 @@ TEST(ScoreSrc, ScoreSrc3) {
                 "smfscore1.mid\n"
                 "");
     DummyFilter f;
-    ScoreSrc inst("testdata/SCORE/playlist1.m3u", f);
+    CorrectToneFilter inst("testdata/SCORE/playlist1.m3u", f);
 
     setTime(0);
 
@@ -179,11 +210,6 @@ TEST(ScoreSrc, ScoreSrc3) {
 
     EXPECT_TRUE(inst.setParam(ScoreFilter::PARAMID_SCORE, 0));
     EXPECT_EQ(0, inst.getParam(ScoreFilter::PARAMID_SCORE));
-
-    EXPECT_TRUE(inst.isAvailable(ScoreSrc::PARAMID_CONTINUOUS_PLAYBACK));
-    EXPECT_FALSE(inst.getParam(ScoreSrc::PARAMID_CONTINUOUS_PLAYBACK));
-    EXPECT_TRUE(inst.setParam(ScoreSrc::PARAMID_CONTINUOUS_PLAYBACK, true));
-    EXPECT_TRUE(inst.getParam(ScoreSrc::PARAMID_CONTINUOUS_PLAYBACK));
 
     EXPECT_TRUE(inst.setParam(ScoreSrc::PARAMID_STATUS, ScoreSrc::PLAY));
 
@@ -199,11 +225,12 @@ TEST(ScoreSrc, ScoreSrc3) {
             break;
         }
     }
+    EXPECT_GE(5000, count);
     EXPECT_GT(25000, getTime());
 }
 
-// 4. use MIDI Message
-TEST(ScoreSrc, ScoreSrc4) {
+// use MIDI Message
+TEST(CorrectToneFilter, CorrectToneTest4) {
     uint8_t smf_data[] = {0x4D, 0x54, 0x68, 0x64,                                                              // "MThd"
                           0x00, 0x00, 0x00, 0x06,                                                              // length = 6
                           0x00, 0x01,                                                                          // format = 1
@@ -227,7 +254,7 @@ TEST(ScoreSrc, ScoreSrc4) {
                           0x00, 0xFF, 0x2F, 0x00};                                                             // [     0] End of Track
     create_file("testdata/SCORE/smfscore4.mid", smf_data, sizeof(smf_data) / sizeof(smf_data[0]));
     DummyFilter f;
-    ScoreSrc inst("testdata/SCORE/smfscore4.mid", f);
+    CorrectToneFilter inst("testdata/SCORE/smfscore4.mid", f);
 
     setTime(0);
 
@@ -235,43 +262,9 @@ TEST(ScoreSrc, ScoreSrc4) {
 
     EXPECT_TRUE(inst.setParam(ScoreSrc::PARAMID_STATUS, ScoreSrc::PLAY));
 
-    uint8_t stop_msg[] = {MIDI_MSG_STOP};
-    EXPECT_TRUE(inst.sendMidiMessage(stop_msg, MIDI_MSGLEN_STOP));
-
-    uint8_t con_msg[] = {MIDI_MSG_CONTINUE};
-    EXPECT_TRUE(inst.sendMidiMessage(con_msg, MIDI_MSGLEN_CONTINUE));
-
     int count = 0;
     while (count < 50) {
         inst.update();
         count++;
     }
-
-    uint8_t spp_msg[] = {MIDI_MSG_SONG_POSITION_POINTER, 0, 8};
-    EXPECT_TRUE(inst.sendMidiMessage(spp_msg, MIDI_MSGLEN_SONG_POSITION_POINTER));
-
-    count = 0;
-    while (count < 50) {
-        inst.update();
-        count++;
-    }
-
-    spp_msg[1] = 127;
-    spp_msg[2] = 127;
-    EXPECT_TRUE(inst.sendMidiMessage(spp_msg, MIDI_MSGLEN_SONG_POSITION_POINTER));
-
-    EXPECT_TRUE(inst.setParam(ScoreSrc::PARAMID_STATUS, ScoreSrc::PAUSE));
-    EXPECT_TRUE(inst.setParam(ScoreSrc::PARAMID_SCORE, 0));
-    EXPECT_TRUE(inst.setParam(ScoreSrc::PARAMID_STATUS, ScoreSrc::PLAY));
-
-    uint8_t mtc_msg[] = {MIDI_MSG_SYS_EX_EVENT, 0x7F, 0x7F, 0x01, 0x01, 0x00, 0x00, 0x02, 0x00, 0xF7};
-    EXPECT_TRUE(inst.sendMidiMessage(mtc_msg, 10));
-
-    mtc_msg[7] = 0x00;
-    mtc_msg[8] = 0x10;
-    EXPECT_TRUE(inst.sendMidiMessage(mtc_msg, 10));
-
-    mtc_msg[6] = 0x01;
-    mtc_msg[8] = 0x00;
-    EXPECT_TRUE(inst.sendMidiMessage(mtc_msg, 10));
 }

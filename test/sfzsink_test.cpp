@@ -17,8 +17,8 @@
 
 #include "SFZSink.h"
 
-void create_file(const String &file_path, const String &text) {
-    registerDummyFile(file_path, text);
+static void create_file(const String& file_path, const String& text) {
+    registerDummyFile(file_path, (uint8_t*)text.c_str(), text.length());
 }
 
 class SfzTest : public ::testing::Test {

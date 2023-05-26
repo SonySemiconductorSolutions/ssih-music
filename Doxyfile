@@ -38,7 +38,7 @@ PROJECT_NAME           = "Sound Signal Processing Library for Spresense"
 # could be handy for archiving the generated documentation or if some version
 # control system is used.
 
-PROJECT_NUMBER         = "1.2.0"
+PROJECT_NUMBER         = "1.1.0"
 
 # Using the PROJECT_BRIEF tag one can provide an optional one line description
 # for a project that appears at the top of each page and should give viewer a
@@ -2596,7 +2596,7 @@ DIAFILE_DIRS           =
 # generate a warning when it encounters a \startuml command in this case and
 # will not generate output for the diagram.
 
-PLANTUML_JAR_PATH      = plantuml.jar
+PLANTUML_JAR_PATH      =
 
 # When using plantuml, the PLANTUML_CFG_FILE tag can be used to specify a
 # configuration file for plantuml.

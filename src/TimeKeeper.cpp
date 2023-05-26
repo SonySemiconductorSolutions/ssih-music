@@ -153,7 +153,7 @@ bool TimeKeeper::isScheduledTime() {
 
 uint32_t TimeKeeper::midiBeatToTick(uint16_t beats) {
     // 1 beat = 24 MIDI clock, 1 MIDI beat = 6 MIDI clock, 1 beat = 4 MIDI beat
-    debug_printf("[%s::%s] beats=%d, ticks=%d, division=%d\n", kClassName, __func__, (int)beats, (int)ticks, (int)division_);
+    debug_printf("[%s::%s] beats=%d, division=%d\n", kClassName, __func__, (int)beats, (int)division_);
     return division_ * beats / 4;
 }
 
@@ -203,12 +203,12 @@ unsigned long TimeKeeper::mtcToMs(uint8_t hr, uint8_t mn, uint8_t sc, uint8_t fr
         return 1000 * n / 25;
     } else if (t == 0x02) {
         // 0b10 = 30fps(DF) = 29.97fps
-        if ((m % 10 != 0) && (s == 0) && (f < 2)) {
+        if ((s == 0) && (m % 10 != 0) && (f < 2)) {
             f = 2;
         }
-        unsigned long df = (m * 2) - ((m / 10) * 2) + (h * (60 - 6) * 2);
+        unsigned long df = ((h * (60 - 6)) + m - (m / 10)) * 2;
         unsigned long n = (((((h * 60) + m) * 60) + s) * 30) + f - df;
-        return 1000 * n / 30 * 1001 / 1000;
+        return 1001 * n / 30;
     } else if (t == 0x03) {
         // 0b11 = 30fps(NDF)
         unsigned long n = (((((h * 60) + m) * 60) + s) * 30) + f;
