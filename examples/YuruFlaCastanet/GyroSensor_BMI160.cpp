@@ -34,8 +34,8 @@ bool GyroSensor::get(int* x, int* y, int* z) {
     int raw_x = 0, raw_y = 0, raw_z = 0;
     BMI160.readGyro(raw_x, raw_y, raw_z);
 
-    *x = convertDegreePerSecond(raw_y, gyro_range_);
-    *y = convertDegreePerSecond(raw_x, gyro_range_);
+    *y = convertDegreePerSecond(raw_y, gyro_range_);
+    *x = convertDegreePerSecond(raw_x, gyro_range_);
     *z = convertDegreePerSecond(raw_z, gyro_range_);
     return true;
 }

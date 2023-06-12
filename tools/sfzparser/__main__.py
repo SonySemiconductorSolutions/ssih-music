@@ -169,8 +169,9 @@ def parseRegion(context, region):
         input_path = os.path.join(parent_dir, default_path + sample)
         wav_path = getOutputWavPath(sample, pitch_keycenter, key)
         output_path = os.path.join(output_dir, default_path + wav_path)
-        convertWavFile(input_path, output_path, pitch_keycenter, key,
-                       OUT_FS, OUT_CHANNELS, OUT_BIT_WIDTH)
+        if not sample.startswith('*'):
+            convertWavFile(input_path, output_path, pitch_keycenter, key,
+                           OUT_FS, OUT_CHANNELS, OUT_BIT_WIDTH)
         fs = getAudioFs(input_path)
         new_region = region.cloneNode()
         for o in new_region.childNodes:
@@ -214,7 +215,8 @@ def parseSfzFile(path, node, output_dir):
     parseSfzNode({
         'path': path,
         'output_dir': output_dir,
-        'global': node
+        'global': node,
+        'group': None
     }, node)
     output_path = os.path.join(output_dir, os.path.basename(path))
     if not os.path.exists(output_dir):

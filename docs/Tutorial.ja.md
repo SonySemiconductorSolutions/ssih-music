@@ -99,7 +99,7 @@ ssprocLibはSpresenseを使った楽器ソフトウェアのサンプルとし�
 ssprocLibはいくつかの楽器ソフトウェアのサンプルを用意しています。
 
 * ボタンで演奏する楽器
-    * ButtonDrum
+    * [ButtonDrum](/examples/ButtonDrum/README.md)
         * ボタンを押すと対応する音が出る楽器です。LCD基板のボタン4～6を使用します。
             * ![LCD KITの基板画像](/docs/Sample_LCD.png)
             * ボタンの動作
@@ -107,17 +107,17 @@ ssprocLibはいくつかの楽器ソフトウェアのサンプルを用意し�
                 * ボタン5: 音源2を再生する
                 * ボタン6: 音源を切り替える
                 * ボタン7: 使用しません
-    * OneKeySynth
-        * ボタンを押すと楽譜ファイルの通りに演奏する楽器です。LCD基板のボタン4～5を使用します。
+    * [OneKeySynth](/examples/OneKeySynth/README.md)
+        * ボタンを押すと楽譜ファイルの通りに演奏する楽器です。LCD基板のボタン4を使用します。
             * ボタンの動作
                 * ボタン4: 楽譜ファイルに従って音源を再生する
-                * ボタン5: ボタン4と同じ
+                * ボタン5: 使用しません
                 * ボタン6: 使用しません
                 * ボタン7: 使用しません
 * マイクで演奏する楽器
-    * SimpleHorn
+    * [SimpleHorn](/examples/SimpleHorn/README.md)
         * 演奏者の鼻歌と同じ高さの音を出す楽器です。マイクとマイク基板を利用します。
-    * YuruHorn
+    * [YuruHorn](/examples/YuruHorn/README.md)
         * 演奏者の鼻歌と同じ高さの音を出す楽器です。マイクとマイク基板を利用します。
         * [SFZ Format](http://sfzformat.com/legacy/)による音源ファイルの再生制御をすることできます。
         * 例えば、ループ再生をすることによって、音源ファイルよりも長い時間の再生ができます。
@@ -220,26 +220,30 @@ Src モジュールと Sink モジュールは下記の関数を備えていま�
             inst.begin();
         }
         
+        Button button4(PIN_D04);
+        Button button5(PIN_D05);
+        Button button6(PIN_D06);
+        
+        int note1 = INVALID_NOTE_NUMBER;
+        int note2 = INVALID_NOTE_NUMBER;
+        
         int selector = 0;
-        int note = 60 + (selector * 2);
-
+        
         void loop() {
             // ボタン4
-            int button4_input = digitalRead(PIN_D04);
-            if (button4_input != button4) {
-                if (button4_input == LOW) {
-                    // ボタンが押されたら、鳴らす音を選んで、再生する
-                    note = 60 + (selector * 2);
-                    inst.sendNoteOn(note, DEFAULT_VELOCITY, DEFAULT_CHANNEL);
+            if (button4.hasChanged()) {
+                if (button4.isPressed()) {
+                    note1 = 60 + (selector * 2);
+                    inst.sendNoteOn(note1, DEFAULT_VELOCITY, DEFAULT_CHANNEL);
                 } else {
-                    // ボタンが離されたら、鳴らしている音を止める
-                    inst.sendNoteOff(note, DEFAULT_VELOCITY, DEFAULT_CHANNEL);
+                    inst.sendNoteOff(note1, DEFAULT_VELOCITY, DEFAULT_CHANNEL);
                 }
-                button4 = button4_input;
             }
+        
             // ボタン5 (省略)
+        
             // ボタン6 (省略)
-            
+        
             inst.update();
         }
         ```
@@ -275,10 +279,10 @@ ssprocLibは音高を演奏データに変換するモジュール `YuruhornSrc`
             {71, "SawLpf/71_B4.wav"},
             {72, "SawLpf/72_C5.wav"}
         };
-
+        
         // 2. SDSink に対応表を登録する
         SDSink sink(table, 25);
-
+        
         // 3. YuruhornSrc の次のモジュールとして SDSink を登録する
         YuruhornSrc inst(sink);
         ```
@@ -355,11 +359,11 @@ SFZファイルの簡単な書き方を確認しましょう。
         SFZSink sink("yuruhorn.sfz");   // SDSink の対応表の代わりに SFZSink にはファイル名を指定する
         OctaveShift filter(sink);       // OctaveShift の次のモジュールとして SFZSink を登録する
         YuruhornSrc inst(filter);       // YuruhornSrc の次のモジュールとして OctaveShift を登録する
-
+        
         void setup() {
             inst.begin();
         }
-
+        
         void loop() {
             inst.update();
         }

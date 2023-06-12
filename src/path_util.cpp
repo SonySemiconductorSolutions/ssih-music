@@ -8,12 +8,6 @@
 
 #include <Arduino.h>
 
-/**
- * @brief Get the Folder Path object
- *
- * @param path "/path/to.file"
- * @return String "/path/"
- */
 String getFolderPath(const String& path) {
     int sep1 = path.lastIndexOf("/");
     int sep2 = path.lastIndexOf("\\");
@@ -25,12 +19,6 @@ String getFolderPath(const String& path) {
     }
 }
 
-/**
- * @brief Get the Base Name object
- *
- * @param path "/path/to.file"
- * @return String "to.file"
- */
 String getBaseName(const String& path) {
     int sep1 = path.lastIndexOf("/");
     int sep2 = path.lastIndexOf("\\");
@@ -42,12 +30,6 @@ String getBaseName(const String& path) {
     }
 }
 
-/**
- * @brief Get the Extension object
- *
- * @param path "/path/to.file"
- * @return String ".file"
- */
 String getExtension(const String& path) {
     String basename = getBaseName(path);
     int sep = path.lastIndexOf(".");

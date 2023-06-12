@@ -11,11 +11,13 @@
 #error "Core selection is wrong!!"
 #endif
 
+#include <ChannelFilter.h>
 #include <ScoreSrc.h>
 #include <SFZSink.h>
 
 SFZSink sink("SawLpf.sfz");
-ScoreSrc inst("SCORE", true, sink);
+ChannelFilter filter(sink);
+ScoreSrc inst("SCORE", filter);
 
 void setup() {
     // init built-in I/O
@@ -26,12 +28,15 @@ void setup() {
     pinMode(LED3, OUTPUT);
 
     // setup instrument
+    inst.setParam(ScoreSrc::PARAMID_CONTINUOUS_PLAYBACK, 1);
+    inst.setParam(ChannelFilter::PARAMID_CHANNEL_MASK, 0xFFFF);
     if (!inst.begin()) {
         Serial.println("ERROR: init error.");
         while (true) {
             delay(1000);
         }
     }
+    inst.setParam(ScoreSrc::PARAMID_STATUS, ScoreSrc::PLAY);
 
     Serial.println("Ready to play MusicBox");
 }

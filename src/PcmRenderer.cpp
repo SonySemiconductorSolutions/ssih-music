@@ -18,6 +18,10 @@
 #include <MemoryUtil.h>
 #include <arch/board/cxd56_audio.h>
 
+#define ARM_MATH_CM4
+#define __FPU_PRESENT 1U
+#include <cmsis/arm_math.h>
+
 // #define DEBUG (1)
 
 // clang-format off
@@ -126,16 +130,6 @@ PcmRenderer::~PcmRenderer() {
     }
 }
 
-PcmRenderer::State PcmRenderer::getState() {
-    debug_printf("[%s::%s] deprecated\n", kClassName, __func__);
-    return states_[0];
-}
-
-void PcmRenderer::setState(PcmRenderer::State state) {
-    debug_printf("[%s::%s] deprecated\n", kClassName, __func__);
-    states_[0] = state;
-}
-
 void PcmRenderer::begin() {
     trace_printf("[%s::%s] ()\n", kClassName, __func__);
     err_t err = AUDIOLIB_ECODE_OK;
@@ -241,14 +235,29 @@ bool PcmRenderer::render() {
         }
         read_size = (read_size < getReadableSize(i) ? read_size : getReadableSize(i));
         if (bit_depth_ == 16) {
+            size_t frame_sample_size = frame_size / 2;
             int16_t *dst = reinterpret_cast<int16_t *>(raw);
-            int16_t src[frame_size / 2];
+            int16_t src[frame_sample_size];
             read(i, src, read_size);
             if (states_[i] == kStateAllocated) {
-                for (size_t j = 0; j < frame_size / 2; j++) {
-                    dst[j] += src[j];
+                for (size_t j = 0; j < frame_sample_size; j += 2) {
+                    *((uint32_t *)&dst[j]) = __QADD16(*((uint32_t *)&dst[j]), *((uint32_t *)&src[j]));
                 }
+            } else if (states_[i] == kStateDeallocating) {
+                // fade-out
+                trace_printf("[%d]:Deallocate\n", i);
+                for (size_t j = 0; j < frame_sample_size; j++) {
+                    src[j] = (int16_t)(src[j] * (float)(frame_sample_size - j) / (frame_sample_size));
+                }
+
+                for (size_t j = 0; j < frame_sample_size; j += 2) {
+                    *((uint32_t *)&dst[j]) = __QADD16(*((uint32_t *)&dst[j]), *((uint32_t *)&src[j]));
+                }
+                states_[i] = kStateDeallocated;
             }
+        }
+        if (states_[i] == kStateDeallocating) {
+            states_[i] = kStateDeallocated;
         }
         if (states_[i] == kStateDeallocated && getReadableSize(i) == 0) {
             states_[i] = kStateUnallocated;
@@ -271,12 +280,12 @@ void PcmRenderer::onError(const ErrorAttentionParam *attparam) {
 }
 #endif
 
-void PcmRenderer::onActivated(MsgQueId requester_dtq, MsgType msgtype, AsOutputMixDoneParam *param) {
+void PcmRenderer::onActivated(MsgQueId /*requester_dtq*/, MsgType /*msgtype*/, AsOutputMixDoneParam */*param*/) {
     debug_printf("[%s::%s] info: activated OutputMixer\n", kClassName, __func__);
     render();
 }
 
-void PcmRenderer::onSendData(int32_t identifier, bool is_end) {
+void PcmRenderer::onSendData(int32_t /*identifier*/, bool is_end) {
     // trace_printf("[%s::%s] (%d, %d)\n", kClassName, __func__, identifier, is_end);
     response_count_++;
     while (true) {
@@ -286,7 +295,7 @@ void PcmRenderer::onSendData(int32_t identifier, bool is_end) {
         break;
     }
     if (is_end) {
-        setState(kStateUnallocated);
+        // states_[0] = kStateUnallocated;
     }
 }
 
@@ -300,7 +309,7 @@ int PcmRenderer::allocateChannel() {
     for (int i = 0; i < mix_channels_; i++) {
         if (states_[i] == kStateUnallocated) {
             wp_[i] = rp_[i] = 0;
-            states_[i] = kStateAllocated;
+            states_[i] = kStateAllocating;
             debug_printf("[%s::%s] allocated %d\n", kClassName, __func__, i);
             return i;
         }
@@ -311,7 +320,8 @@ int PcmRenderer::allocateChannel() {
 void PcmRenderer::deallocateChannel(int ch) {
     trace_printf("[%s::%s] (%d)\n", kClassName, __func__, ch);
     if (0 <= ch && ch < mix_channels_) {
-        states_[ch] = kStateDeallocated;
+        states_[ch] = kStateDeallocating;
+        trace_printf("[%d]:Deallocating\n", ch);
     }
 }
 
@@ -354,16 +364,32 @@ size_t PcmRenderer::write(int ch, void *src, size_t request_size) {
     if (writable_size < request_size) {
         return 0;
     }
-    uint8_t *p = reinterpret_cast<uint8_t *>(src);
-    if (wp_[ch] + request_size >= capacity_) {
-        size_t s = capacity_ - wp_[ch];
-        memcpy(&cache_[ch][wp_[ch]], &p[0], s);
-        memcpy(&cache_[ch][0], &p[s], request_size - s);
-        wp_[ch] = request_size - s;
-    } else {
-        memcpy(&cache_[ch][wp_[ch]], p, request_size);
-        wp_[ch] += request_size;
+
+    if (bit_depth_ == 16) {
+        size_t frame_sample_size = request_size / 2;
+
+        int16_t dst[frame_sample_size];
+        memcpy(dst, src, request_size);
+        if (states_[ch] == kStateAllocating) {
+            for (size_t i = 0; i < frame_sample_size; i++) {
+                dst[i] = (int16_t)(dst[i] * ((float)i / (frame_sample_size)));
+            }
+            states_[ch] = kStateAllocated;
+        }
+        trace_printf("[%d]:Allocate\n", ch);
+
+        uint8_t *p = reinterpret_cast<uint8_t *>(dst);
+        if (wp_[ch] + request_size >= capacity_) {
+            size_t s = capacity_ - wp_[ch];
+            memcpy(&cache_[ch][wp_[ch]], &p[0], s);
+            memcpy(&cache_[ch][0], &p[s], request_size - s);
+            wp_[ch] = request_size - s;
+        } else {
+            memcpy(&cache_[ch][wp_[ch]], p, request_size);
+            wp_[ch] += request_size;
+        }
     }
+
     return request_size;
 }
 

@@ -16,7 +16,7 @@
 #include "YuruInstrumentConfig.h"
 #include "YuruInstrumentFilter.h"
 
-//#define DEBUG (1)
+// #define DEBUG (1)
 
 // clang-format off
 #define nop(...) do {} while (0)
@@ -82,7 +82,7 @@ static int PrintLs(const char *path) {
     }
 }
 
-static int CommandLs(YuruInstrumentConsole *console, int argc, char *argv[]) {
+static int CommandLs(YuruInstrumentConsole * /*console*/, int argc, char *argv[]) {
     if (argc >= 2) {
         for (int i = 1; i < argc; i++) {
             int err = PrintLs(argv[i]);
@@ -96,7 +96,7 @@ static int CommandLs(YuruInstrumentConsole *console, int argc, char *argv[]) {
     }
 }
 
-static int CommandMkdir(YuruInstrumentConsole *console, int argc, char *argv[]) {
+static int CommandMkdir(YuruInstrumentConsole * /*console*/, int argc, char *argv[]) {
     SDClass sdcard = SDClass();
     sdcard.begin();
     for (int i = 1; i < argc; i++) {
@@ -107,7 +107,7 @@ static int CommandMkdir(YuruInstrumentConsole *console, int argc, char *argv[]) 
     return YuruInstrumentConfig::kNoError;
 }
 
-static int CommandRm(YuruInstrumentConsole *console, int argc, char *argv[]) {
+static int CommandRm(YuruInstrumentConsole * /*console*/, int argc, char *argv[]) {
     SDClass sdcard = SDClass();
     sdcard.begin();
     for (int i = 1; i < argc; i++) {
@@ -123,7 +123,7 @@ static int CommandRm(YuruInstrumentConsole *console, int argc, char *argv[]) {
     return YuruInstrumentConfig::kNoError;
 }
 
-static int CommandRmdir(YuruInstrumentConsole *console, int argc, char *argv[]) {
+static int CommandRmdir(YuruInstrumentConsole * /*console*/, int argc, char *argv[]) {
     SDClass sdcard = SDClass();
     sdcard.begin();
     for (int i = 1; i < argc; i++) {
@@ -139,7 +139,7 @@ static int CommandRmdir(YuruInstrumentConsole *console, int argc, char *argv[]) 
     return YuruInstrumentConfig::kNoError;
 }
 
-static int CommandCat(YuruInstrumentConsole *console, int argc, char *argv[]) {
+static int CommandCat(YuruInstrumentConsole * /*console*/, int argc, char *argv[]) {
     SDClass sdcard = SDClass();
     sdcard.begin();
     for (int i = 1; i < argc; i++) {
@@ -159,7 +159,7 @@ static int CommandCat(YuruInstrumentConsole *console, int argc, char *argv[]) {
     return YuruInstrumentConfig::kNoError;
 }
 
-static int CommandOd(YuruInstrumentConsole *console, int argc, char *argv[]) {
+static int CommandOd(YuruInstrumentConsole * /*console*/, int argc, char *argv[]) {
     SDClass sdcard = SDClass();
     sdcard.begin();
     for (int i = 1; i < argc; i++) {
@@ -237,7 +237,7 @@ static int CommandSaveConfig(YuruInstrumentConsole *console, int argc, char *arg
     return -YuruInstrumentConfig::kErrInval;
 }
 
-static int CommandListParam(YuruInstrumentConsole *console, int argc, char *argv[]) {
+static int CommandListParam(YuruInstrumentConsole *console, int /*argc*/, char * /*argv*/[]) {
     if (console == nullptr) {
         return -YuruInstrumentConfig::kErrInval;
     }
@@ -359,6 +359,27 @@ static int CommandSendNoteOn(YuruInstrumentConsole *console, int argc, char *arg
     return -YuruInstrumentConfig::kErrInval;
 }
 
+static int CommandSendMidiMessage(YuruInstrumentConsole *console, int argc, char *argv[]) {
+    if (console == nullptr) {
+        return -YuruInstrumentConfig::kErrInval;
+    }
+    Filter *filter = console->getFilter();
+    uint8_t msg[16];
+    size_t msg_length = sizeof(msg);
+    memset(msg, 0x00, sizeof(msg));
+    if ((argc - 1) < (int)msg_length) {
+        msg_length = argc - 1;
+    }
+    for (size_t i = 0; i < msg_length; i++) {
+        msg[i] = strtoul(argv[i + 1], nullptr, 0);
+    }
+    if (filter) {
+        filter->sendMidiMessage(msg, msg_length);
+        return YuruInstrumentConfig::kNoError;
+    }
+    return -YuruInstrumentConfig::kErrInval;
+}
+
 static int CommandHelp(YuruInstrumentConsole *console, int argc, char *argv[]);
 
 // clang-format off
@@ -378,11 +399,12 @@ static const CommandSpec g_command_spec[] = {
     {"set",                CommandSetParam          },
     {"noteOff",            CommandSendNoteOff       },
     {"noteOn",             CommandSendNoteOn        },
+    {"send",               CommandSendMidiMessage   },
     {"help",               CommandHelp              },
     {"?",                  CommandHelp              }};
 // clang-format on
 
-static int CommandHelp(YuruInstrumentConsole *console, int argc, char *argv[]) {
+static int CommandHelp(YuruInstrumentConsole * /*console*/, int /*argc*/, char * /*argv*/[]) {
     const int kCommandSpecNum = sizeof(g_command_spec) / sizeof(g_command_spec[0]);
     for (int i = 0; i < kCommandSpecNum; i++) {
         printf("%s\n", g_command_spec[i].name);
@@ -441,7 +463,7 @@ static int ExecuteCommand(YuruInstrumentConsole *console, int argc, char *argv[]
 }
 
 void YuruInstrumentConsole::execute(char *line, int length) {
-    const int kMaxTokenNum = 4;
+    const int kMaxTokenNum = 20;
     struct TokenRange {
         int begin;
         int end;

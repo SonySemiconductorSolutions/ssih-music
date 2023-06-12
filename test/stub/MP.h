@@ -9,6 +9,7 @@
 
 #include <stdint.h>
 
+#define MP_RECV_BLOCKING (0)
 #define MP_RECV_POLLING (0xFFFFFFFF)
 
 #define CONFIG_CXD56_CPUFIFO_NBUFFERS (8)

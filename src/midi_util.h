@@ -5,6 +5,9 @@
  */
 
 #ifndef MIDI_UTIL_H_
+#define MIDI_UTIL_H_
+
+#include <stdint.h>
 
 enum MidiMessageType {
     MIDI_MSG_NOTE_OFF = 0x80,
@@ -33,7 +36,7 @@ enum MidiMessageLength {
     MIDI_MSGLEN_CHANNEL_PRESSURE = 2,
     MIDI_MSGLEN_PITCH_BEND_CHANGE = 3,
     MIDI_MSGLEN_SYS_EX_EVENT = 2,
-    MIDI_MSGLEN_SONG_POSITION_POINTER = 4,
+    MIDI_MSGLEN_SONG_POSITION_POINTER = 3,
     MIDI_MSGLEN_SONG_SELECT = 2,
     MIDI_MSGLEN_END_OF_EXCLUSIVE = 2,
     MIDI_MSGLEN_START = 1,

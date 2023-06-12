@@ -4,6 +4,9 @@
  * Copyright 2022 Sony Semiconductor Solutions Corporation
  */
 
+/**
+ * @file SDSink.h
+ */
 #ifndef SD_SINK_H_
 #define SD_SINK_H_
 
@@ -18,10 +21,19 @@
 #include "PcmRenderer.h"
 #include "YuruInstrumentFilter.h"
 
+/**
+ * @brief @~japanese ユーザーが定義した音源テーブルにしたがって、音源を再生する楽器部品です。
+ */
 class SDSink : public NullFilter {
 public:
-    enum ParamId {                    // MAGIC CHAR = 'S'
-        PARAMID_OFFSET = ('S' << 8),  //<
+    enum ParamId {  // MAGIC CHAR = 'S'
+        /**
+         * @brief @~japanese 音源ファイルの先頭のスキップ量を指定します。
+         */
+        PARAMID_OFFSET = ('S' << 8),
+        /**
+         * @brief @~japanese ループ再生の有効・無効を指定します。
+         */
         PARAMID_LOOP
     };
 
@@ -38,10 +50,15 @@ public:
         int render_ch;
     };
 
+    /**
+     * @brief @~japanese SDSink オブジェクトを生成します。
+     * @param[in] table @~japanese 音源テーブル
+     * @param[in] table_length @~japanese 音源テーブルの要素数
+     */
     SDSink(const Item *table, size_t table_length);
+
     ~SDSink();
 
-    // Filter, NullFilter
     bool begin() override;
     void update() override;
 
@@ -51,6 +68,7 @@ public:
 
     bool sendNoteOff(uint8_t note, uint8_t velocity, uint8_t channel) override;
     bool sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) override;
+    bool sendControlChange(uint8_t ctrl_num, uint8_t value, uint8_t channel) override;
 
 private:
     PlaybackUnit units_[128];

@@ -20,15 +20,22 @@
 class File : public Stream {
 private:
     char *name_;
+    uint8_t mode_;
     FILE *fp_;
     unsigned long size_;
     unsigned long curpos_;
-    String content_;
+    uint8_t *dummy_file_content_;
+    bool is_directory_;
+    int dummy_files_index_;
 
 public:
     File(const char *name, uint8_t mode = FILE_READ);
     File(void);
+    File(const File &lhs);
     ~File(void);
+
+    File &operator=(const File &lhs);
+
     virtual size_t write(uint8_t val);
     virtual size_t write(const uint8_t *buf, size_t len);
     virtual int read(void);
@@ -47,6 +54,6 @@ public:
     void rewindDirectory(void);
 };
 
-void registerDummyFile(const String &path, const String &content);
+void registerDummyFile(const String &path, const uint8_t *content, int size);
 
 #endif  // DUMMY_FILE_H_

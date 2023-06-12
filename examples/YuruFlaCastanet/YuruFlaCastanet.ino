@@ -53,16 +53,16 @@ void loop() {
         int x_thresh = 150, y_thresh = 150, z_thresh = 150;  // [deg/sec]
         int note = INVALID_NOTE_NUMBER;
         if (x >= x_thresh) {
-            Serial.println("PITCH(CW) => roll");
-            note = 70;
-        } else if (x <= -x_thresh) {
-            Serial.println("PITCH(CCW) => triplet");
-            note = 73;
-        } else if (y >= y_thresh) {
             Serial.println("ROLL(CW) => rhythm");
             note = 71;
-        } else if (y <= -y_thresh) {
+        } else if (x <= -x_thresh) {
             Serial.println("ROLL(CCW) => triplet");
+            note = 73;
+        } else if (y >= y_thresh) {
+            Serial.println("PITCH(CW) => roll");
+            note = 70;
+        } else if (y <= -y_thresh) {
+            Serial.println("PITCH(CCW) => triplet");
             note = 73;
         } else if (z >= z_thresh) {
             Serial.println("YAW(CW) => triplet");

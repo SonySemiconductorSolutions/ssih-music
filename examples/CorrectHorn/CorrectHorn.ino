@@ -16,7 +16,7 @@
 #include <VoiceTriggerSrc.h>
 
 SFZSink sink("SawLpf.sfz");
-CorrectToneFilter filter("SCORE", true, sink);
+CorrectToneFilter filter("SCORE", sink);
 VoiceTriggerSrc inst(filter, DEFAULT_CHANNEL);
 
 void setup() {
@@ -34,6 +34,7 @@ void setup() {
             delay(1000);
         }
     }
+    inst.setParam(CorrectToneFilter::PARAMID_STATUS, CorrectToneFilter::PLAY);
 
     Serial.println("Ready to play CorrectHorn");
 }

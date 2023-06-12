@@ -33,6 +33,26 @@
 
 static const char kClassName[] = "SFZParser";
 
+enum State {
+    kReady,
+    kExpectMacro,
+    kMacro,
+    kExpectDefineName,
+    kDefineName,
+    kExpectDefineValue,
+    kDefineValue,
+    kExpectIncludePath,
+    kIncludePath,
+    kIncludeEsc,
+    kHeader,
+    kExpectHeaderName,
+    kHeaderName,
+    kOpcode,
+    kWaitEqual,
+    kWaitValue,
+    kValue
+};
+
 static String replaceString(const String& str, std::vector<String>& names, std::vector<String>& values) {
     String ret = str;
     int pos = 0;
@@ -55,7 +75,7 @@ static String replaceString(const String& str, std::vector<String>& names, std::
     return ret;
 }
 
-SFZParser::SFZParser() : parsing_root_(true), define_names_(), define_values_() {
+SFZParser::SFZParser() : state_(kReady), parsing_root_(true), header_name_(), define_names_(), define_values_() {
 }
 
 SFZParser::~SFZParser() {
@@ -66,30 +86,8 @@ static int isGraphX(int c) {
 }
 
 void SFZParser::parse(File sfz_file, const String& sfz_file_path, SFZHandler* handler) {
-    enum State {
-        kReady,
-        kExpectMacro,
-        kMacro,
-        kExpectDefineName,
-        kDefineName,
-        kExpectDefineValue,
-        kDefineValue,
-        kExpectIncludePath,
-        kIncludePath,
-        kIncludeEsc,
-        kHeader,
-        kExpectHeaderName,
-        kHeaderName,
-        kOpcode,
-        kWaitEqual,
-        kWaitValue,
-        kValue
-    };
-
-    State state = kReady;
     bool skip_line = false;
     String macro_name;
-    String header_name;
 
     String include_path;
     String define_name;
@@ -99,9 +97,10 @@ void SFZParser::parse(File sfz_file, const String& sfz_file_path, SFZHandler* ha
     int value_tokens = 0;
     int value_last_token_pos = -1;
 
-    bool stash = parsing_root_;
+    bool parsing_root = parsing_root_;
     parsing_root_ = false;
-    if (stash) {
+    if (parsing_root) {
+        state_ = kReady;
         handler->startSfz();
     }
     int prev_ch = -1;
@@ -131,72 +130,72 @@ void SFZParser::parse(File sfz_file, const String& sfz_file_path, SFZHandler* ha
                 }
             }
         }
-        trace_printf("[%s::%s] state=%d ch=0x%02X(%c)\n", kClassName, __func__, state, ch, (ch < 0 || ch == '\r' || ch == '\n') ? ' ' : ch);
-        if (state == kReady) {
+        trace_printf("[%s::%s] state=%d ch=0x%02X(%c)\n", kClassName, __func__, state_, ch, (ch < 0 || ch == '\r' || ch == '\n') ? ' ' : ch);
+        if (state_ == kReady) {
             if (ch == '#') {
-                state = kExpectMacro;
+                state_ = kExpectMacro;
                 macro_name = "";
             } else if (ch == '<') {
-                if (header_name != "") {
-                    handler->endHeader(header_name);
+                if (header_name_ != "") {
+                    handler->endHeader(header_name_);
+                    header_name_ = "";
                 }
-                state = kExpectHeaderName;
-                header_name = "";
+                state_ = kExpectHeaderName;
             } else if (ch == '=') {
-                state = kWaitValue;
+                state_ = kWaitValue;
             } else if (isGraphX(ch)) {
-                state = kOpcode;
+                state_ = kOpcode;
                 opcode_name = String((char)ch);
             }
-        } else if (state == kExpectMacro) {
+        } else if (state_ == kExpectMacro) {
             if (ch < 0 || ch == '\r' || ch == '\n') {
-                state = kReady;
+                state_ = kReady;
             } else if (isGraphX(ch)) {
-                state = kMacro;
+                state_ = kMacro;
                 macro_name = String((char)ch);
             }
-        } else if (state == kMacro) {
+        } else if (state_ == kMacro) {
             if (ch < 0 || ch == '\r' || ch == '\n') {
-                state = kReady;
+                state_ = kReady;
             } else if (isWhitespace(ch)) {
                 if (macro_name == "define") {
-                    state = kExpectDefineName;
+                    state_ = kExpectDefineName;
                     define_name = "";
                 } else if (macro_name == "include") {
-                    state = kExpectIncludePath;
+                    state_ = kExpectIncludePath;
                     include_path = "";
                 } else {
-                    state = kReady;
+                    state_ = kReady;
                 }
             } else {
                 macro_name += (char)ch;
             }
-        } else if (state == kExpectDefineName) {
+        } else if (state_ == kExpectDefineName) {
             if (ch < 0 || ch == '\r' || ch == '\n') {
-                state = kReady;
+                state_ = kReady;
             } else if (ch == '$') {
-                state = kDefineName;
+                state_ = kDefineName;
                 define_name = String((char)ch);
             }
-        } else if (state == kDefineName) {
+        } else if (state_ == kDefineName) {
             if (ch < 0 || ch == '\r' || ch == '\n') {
-                state = kReady;
+                state_ = kReady;
             } else if (isGraphX(ch)) {
                 define_name += (char)ch;
             } else {
-                state = kExpectDefineValue;
+                state_ = kExpectDefineValue;
                 define_value = "";
             }
-        } else if (state == kExpectDefineValue) {
+        } else if (state_ == kExpectDefineValue) {
             if (ch < 0 || ch == '\r' || ch == '\n') {
-                state = kReady;
+                state_ = kReady;
             } else if (isGraphX(ch)) {
-                state = kDefineValue;
+                state_ = kDefineValue;
                 define_value = String((char)ch);
             }
-        } else if (state == kDefineValue) {
+        } else if (state_ == kDefineValue) {
             if (ch < 0 || ch == '\r' || ch == '\n' || isWhitespace(ch)) {
-                state = kReady;
+                state_ = kReady;
                 String n = replaceString(define_name, define_names_, define_values_);
                 String v = replaceString(define_value, define_names_, define_values_);
                 define_names_.push_back(n);
@@ -204,17 +203,18 @@ void SFZParser::parse(File sfz_file, const String& sfz_file_path, SFZHandler* ha
             } else if (isGraphX(ch)) {
                 define_value += (char)ch;
             }
-        } else if (state == kExpectIncludePath) {
+        } else if (state_ == kExpectIncludePath) {
             if (ch < 0 || ch == '\r' || ch == '\n') {
-                state = kReady;
+                state_ = kReady;
             } else if (ch == '"') {
-                state = kIncludePath;
+                state_ = kIncludePath;
                 include_path = "";
             }
-        } else if (state == kIncludePath) {
+        } else if (state_ == kIncludePath) {
             if (ch < 0 || ch == '\r' || ch == '\n') {
-                state = kReady;
+                state_ = kReady;
             } else if (ch == '"') {
+                state_ = kReady;
                 String path = joinPath(getFolderPath(sfz_file_path), include_path);
                 File include_file = File(path.c_str());
                 if (include_file) {
@@ -224,71 +224,70 @@ void SFZParser::parse(File sfz_file, const String& sfz_file_path, SFZHandler* ha
                 } else {
                     error_printf("[%s::%s] error: cannot open '%s'\n", kClassName, __func__, path.c_str());
                 }
-                state = kReady;
             } else if (ch == '\\') {
-                state = kIncludeEsc;
+                state_ = kIncludeEsc;
             } else {
                 include_path += (char)ch;
             }
-        } else if (state == kIncludeEsc) {
+        } else if (state_ == kIncludeEsc) {
             if (ch >= 0) {
                 include_path += (char)ch;
             }
-            state = kIncludePath;
-        } else if (state == kExpectHeaderName) {
+            state_ = kIncludePath;
+        } else if (state_ == kExpectHeaderName) {
             if (ch < 0) {
-                state = kReady;
+                state_ = kReady;
             } else if (isGraphX(ch)) {
-                state = kHeaderName;
-                header_name = String((char)ch);
+                state_ = kHeaderName;
+                header_name_ = String((char)ch);
             }
-        } else if (state == kHeaderName) {
+        } else if (state_ == kHeaderName) {
             if (ch < 0) {
-                state = kReady;
+                state_ = kReady;
             } else if (ch == '<') {
-                state = kExpectHeaderName;
+                state_ = kExpectHeaderName;
             } else if (ch == '>') {
-                header_name.trim();
-                handler->startHeader(header_name);
-                state = kReady;
+                header_name_.trim();
+                handler->startHeader(header_name_);
+                state_ = kReady;
             } else if (isGraphX(ch)) {
-                header_name += (char)ch;
+                header_name_ += (char)ch;
             }
-        } else if (state == kOpcode) {
+        } else if (state_ == kOpcode) {
             if (ch < 0) {
-                state = kReady;
+                state_ = kReady;
             } else if (ch == '<') {
-                state = kExpectHeaderName;
+                state_ = kExpectHeaderName;
             } else if (ch == '=') {
-                state = kWaitValue;
+                state_ = kWaitValue;
             } else if (isWhitespace(ch)) {
-                state = kWaitEqual;
+                state_ = kWaitEqual;
             } else if (isGraphX(ch)) {
                 opcode_name += (char)ch;
             }
-        } else if (state == kWaitEqual) {
+        } else if (state_ == kWaitEqual) {
             if (ch < 0) {
-                state = kReady;
+                state_ = kReady;
             } else if (ch == '<') {
-                state = kExpectHeaderName;
+                state_ = kExpectHeaderName;
             } else if (ch == '=') {
-                state = kWaitValue;
+                state_ = kWaitValue;
             } else if (isGraphX(ch)) {
-                state = kReady;
+                state_ = kReady;
                 next_ch = ch;
             }
-        } else if (state == kWaitValue) {
+        } else if (state_ == kWaitValue) {
             if (ch < 0) {
-                state = kReady;
+                state_ = kReady;
             } else if (ch == '<') {
-                state = kExpectHeaderName;
+                state_ = kExpectHeaderName;
             } else if (isGraphX(ch)) {
-                state = kValue;
+                state_ = kValue;
                 value_str = String((char)ch);
                 value_tokens = 1;
                 value_last_token_pos = 0;
             }
-        } else if (state == kValue) {
+        } else if (state_ == kValue) {
             if (ch < 0 || ch == '\r' || ch == '\n' || ch == '<') {
                 value_str.trim();
                 String o = replaceString(opcode_name, define_names_, define_values_);
@@ -296,7 +295,7 @@ void SFZParser::parse(File sfz_file, const String& sfz_file_path, SFZHandler* ha
                 if (o != "" && v != "") {
                     handler->opcode(o, v);
                 }
-                state = kReady;
+                state_ = kReady;
                 next_ch = ch;
             } else if (ch == '#') {
                 if (isSpace(prev_ch)) {
@@ -306,7 +305,7 @@ void SFZParser::parse(File sfz_file, const String& sfz_file_path, SFZHandler* ha
                     if (o != "" && v != "") {
                         handler->opcode(o, v);
                     }
-                    state = kReady;
+                    state_ = kReady;
                     next_ch = ch;
                 } else {
                     value_str += (char)ch;
@@ -325,7 +324,7 @@ void SFZParser::parse(File sfz_file, const String& sfz_file_path, SFZHandler* ha
                     String v = replaceString(value_str, define_names_, define_values_);
                     handler->opcode(o, v);
                     opcode_name = next_opcode;
-                    state = kWaitValue;
+                    state_ = kWaitValue;
                 } else {
                     value_str += (char)ch;
                 }
@@ -343,13 +342,13 @@ void SFZParser::parse(File sfz_file, const String& sfz_file_path, SFZHandler* ha
         }
     }
 
-    if (header_name != "") {
-        handler->endHeader(header_name);
-    }
-    parsing_root_ = stash;
-    if (parsing_root_) {
+    if (parsing_root) {
+        if (header_name_ != "") {
+            handler->endHeader(header_name_);
+        }
         handler->endSfz();
     }
+    parsing_root_ = parsing_root;
 }
 
 #endif  // ARDUINO_ARCH_SPRESENSE

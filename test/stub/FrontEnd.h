@@ -53,6 +53,7 @@ class FrontEnd {
 public:
     err_t begin(void);
     err_t activate(void);
+    err_t init(uint8_t channel_number, uint8_t bit_length, uint32_t samples_per_frame, uint8_t data_path, AsDataDest dest);
     err_t init(uint8_t channel_number, uint8_t bit_length, uint32_t samples_per_frame, uint8_t data_path, AsDataDest dest, uint8_t preproc_type,
                const char* dsp_path);
     err_t start(void);

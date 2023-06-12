@@ -97,7 +97,11 @@ uint16_t PlaylistParser::getRootTick() {
 }
 
 String PlaylistParser::getFileName() {
-    return "";
+    if (parser_ == nullptr) {
+        error_printf("[%s::%s]: Score is not loading.\n", kClassName, __func__);
+        return "";
+    }
+    return parser_->getFileName();
 }
 
 int PlaylistParser::getNumberOfScores() {

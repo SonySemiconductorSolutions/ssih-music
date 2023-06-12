@@ -4,6 +4,9 @@
  * Copyright 2022 Sony Semiconductor Solutions Corporation
  */
 
+/**
+ * @file SmfParser.h
+ */
 #ifndef SMF_PARSER_H_
 #define SMF_PARSER_H_
 
@@ -16,19 +19,24 @@
 #include "ScoreParser.h"
 #include "YuruInstrumentFilter.h"
 
+/**
+ * @brief @~japanese スタンダードMIDIファイルファイルを入力とする ScoreParser です。
+ */
 class SmfParser : public ScoreParser {
 public:
-    struct MTrkSegment {
+    struct Track {
         int track_id;
+        String name;
         uint32_t offset;
         uint32_t size;
-        String name;
     };
 
-    class SegmentReader {
+    class TrackReader {
     public:
-        SegmentReader(File* file, uint32_t offset, uint32_t size);
-        ~SegmentReader();
+        TrackReader();
+        TrackReader(File* file, uint32_t offset, uint32_t size);
+        TrackReader(const TrackReader& rhs);
+        ~TrackReader();
         size_t available();
         boolean reset();
         int read(void);
@@ -36,23 +44,39 @@ public:
     private:
         File* file_;
         uint32_t file_pos_;
-        uint32_t seg_offset_;
-        size_t seg_size_;
+        uint32_t track_offset_;
+        size_t track_size_;
         uint8_t* buf_;
         size_t buf_size_;
         size_t buf_pos_;
     };
 
-    // Have a track end flag because it does not work properly when managed collectively by stat.
-    struct TrackReader {
+    struct TrackParser {
+    public:
         MidiMessage msg;
-        SegmentReader* reader;
-        bool is_registered;
-        uint8_t running_status;
-        bool at_eot;
+        TrackParser();
+        TrackParser(File* file, size_t offset, size_t size);
+        TrackParser(const TrackParser& rhs);
+        bool available();
+        bool discard();
+        bool eot();
+        bool parse();
+
+    private:
+        bool parseMIDIEvent();
+        bool parseMetaEvent();
+        TrackReader reader_;
+        bool is_registered_;
+        uint8_t running_status_;
+        bool at_eot_;
     };
 
+    /**
+     * @brief @~japanese SmfParser オブジェクトを生成します。
+     * @param[in] path @~japanese スタンダードMIDIファイル(.mid)のパスを指定します。
+     */
     SmfParser(const String& path);
+
     virtual ~SmfParser();
 
     uint16_t getRootTick() override;
@@ -60,25 +84,20 @@ public:
     int getNumberOfScores() override;
     bool loadScore(int id) override;
     String getTitle(int id) override;
-
-    bool getMidiMessage(MidiMessage* midi_message) override;
+    bool getMidiMessage(ScoreParser::MidiMessage* msg) override;
 
 private:
     // SMF tracks
     File file_;
     uint16_t root_tick_;
-    std::vector<MTrkSegment> mtrks_;
+    std::vector<Track> tracks_;
 
     // MIDI variables
     bool is_end_;
 
-    std::vector<TrackReader> readers_;
+    std::vector<TrackParser> parsers_;
 
-    bool parseSMF();
-    bool parseMTrk();
-    bool parseMTrkEvent(TrackReader& track, ScoreParser::MidiMessage* midi_message);
-    bool parseMIDIEvent(TrackReader& track, ScoreParser::MidiMessage* midi_message, uint8_t status_byte);
-    bool parseMetaEvent(TrackReader& track, ScoreParser::MidiMessage* midi_message);
+    bool parse();
 };
 
 #endif  // SMF_PARSER_H_

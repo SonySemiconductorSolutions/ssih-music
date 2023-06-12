@@ -6,7 +6,7 @@
 
 #include "YuruInstrumentFilter.h"
 
-BaseFilter::BaseFilter(Filter& filter) : next_filter_(&filter) {
+BaseFilter::BaseFilter(Filter& filter) : NullFilter(), next_filter_(&filter) {
 }
 
 BaseFilter::~BaseFilter() {
@@ -59,4 +59,67 @@ bool BaseFilter::sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) {
         return false;
     }
     return next_filter_->sendNoteOn(note, velocity, channel);
+}
+
+bool BaseFilter::sendControlChange(uint8_t ctrl_num, uint8_t value, uint8_t channel) {
+    if (next_filter_ == nullptr) {
+        return false;
+    }
+    return next_filter_->sendControlChange(ctrl_num, value, channel);
+}
+
+bool BaseFilter::sendProgramChange(uint8_t prog_num, uint8_t channel) {
+    if (next_filter_ == nullptr) {
+        return false;
+    }
+    return next_filter_->sendProgramChange(prog_num, channel);
+}
+
+bool BaseFilter::sendSongPositionPointer(uint16_t beats) {
+    if (next_filter_ == nullptr) {
+        return false;
+    }
+    return next_filter_->sendSongPositionPointer(beats);
+}
+
+bool BaseFilter::sendSongSelect(uint8_t song) {
+    if (next_filter_ == nullptr) {
+        return false;
+    }
+    return next_filter_->sendSongSelect(song);
+}
+
+bool BaseFilter::sendStart() {
+    if (next_filter_ == nullptr) {
+        return false;
+    }
+    return next_filter_->sendStart();
+}
+
+bool BaseFilter::sendContinue() {
+    if (next_filter_ == nullptr) {
+        return false;
+    }
+    return next_filter_->sendContinue();
+}
+
+bool BaseFilter::sendStop() {
+    if (next_filter_ == nullptr) {
+        return false;
+    }
+    return next_filter_->sendStop();
+}
+
+bool BaseFilter::sendMidiMessage(uint8_t* msg, size_t length) {
+    if (msg == nullptr || length == 0) {
+        return false;
+    }
+
+    bool ret = NullFilter::sendMidiMessage(msg, length);
+    if (ret == false) {
+        if (next_filter_) {
+            ret = next_filter_->sendMidiMessage(msg, length);
+        }
+    }
+    return ret;
 }

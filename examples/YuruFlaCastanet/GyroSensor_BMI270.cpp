@@ -58,7 +58,7 @@ static int8_t bmi270_write(uint8_t dev_id, uint8_t reg_addr, const uint8_t* data
 }
 
 // bmi2_dev.delay_us
-static void bmi270_delay_us(uint32_t period, void* intf_ptr) {
+static void bmi270_delay_us(uint32_t period, void* /* intf_ptr */) {
     delayMicroseconds(period);
 }
 
@@ -144,8 +144,8 @@ bool GyroSensor::begin() {
     // configure I2C
     Wire.begin();
     g_bmi2.dev_id = BMI2_I2C_SEC_ADDR;
-    g_bmi2.read = (bmi2_read_fptr_t)bmi270_read;
-    g_bmi2.write = (bmi2_write_fptr_t)bmi270_write;
+    g_bmi2.read = (bmi2_read_fptr_t)((void*)bmi270_read);
+    g_bmi2.write = (bmi2_write_fptr_t)((void*)bmi270_write);
     g_bmi2.delay_us = (bmi2_delay_fptr_t)bmi270_delay_us;
     g_bmi2.intf = BMI2_I2C_INTF;
     g_bmi2.read_write_len = kReadWriteLen;

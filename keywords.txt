@@ -1,17 +1,23 @@
+BaseFilter	KEYWORD1
+ChannelFilter	KEYWORD1
 CorrectToneFilter	KEYWORD1
+Filter	KEYWORD1
+NullFilter	KEYWORD1
 OctaveShift	KEYWORD1
 OneKeySynthesizerFilter	KEYWORD1
+ParserFactory	KEYWORD1
+PcmRenderer	KEYWORD1
+ScoreFilter	KEYWORD1
+ScoreParser	KEYWORD1
 ScoreSrc	KEYWORD1
 SDSink	KEYWORD1
+SFZParser	KEYWORD1
 SFZSink	KEYWORD1
 ToneFilter	KEYWORD1
-NullFilter	KEYWORD1
-BaseFilter	KEYWORD1
-Filter	KEYWORD1
+VoiceCapture	KEYWORD1
+VoiceTriggerSrc	KEYWORD1
 YuruInstrumentConfig	KEYWORD1
 YuruInstrumentConsole	KEYWORD1
-ChannelFilter	KEYWORD1
-VoiceTriggerSrc	KEYWORD1
 YuruhornSrc	KEYWORD1
 
 begin	KEYWORD2
@@ -21,6 +27,13 @@ getParam    KEYWORD2
 setParam    KEYWORD2
 sendNoteOff	KEYWORD2
 sendNoteOn	KEYWORD2
+sendControlChange	KEYWORD2
+sendProgramChange	KEYWORD2
+sendSongPositionPointer	KEYWORD2
+sendSongSelect	KEYWORD2
+sendStart	KEYWORD2
+sendContinue	KEYWORD2
+sendStop	KEYWORD2
 sendMidiMessage	KEYWORD2
 
 PARAMID_OCTAVE_SHIFT	LITERAL1

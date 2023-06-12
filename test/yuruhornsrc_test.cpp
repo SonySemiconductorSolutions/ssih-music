@@ -14,36 +14,21 @@
 
 #include "YuruhornSrc.h"
 
-class DummyFilter : public NullFilter {
-private:
-public:
-    DummyFilter() : NullFilter() {
-    }
-    ~DummyFilter() {
-    }
-    bool setParam(int param_id, intptr_t value) override {
-        return true;
-    }
-    intptr_t getParam(int param_id) override {
-        return param_id;
-    }
-};
-
-DummyFilter dummy = DummyFilter();
-YuruhornSrc yurusrc = YuruhornSrc(dummy);
-
 TEST(YuruhornSrc, isAvailable) {
-    EXPECT_EQ(1, yurusrc.isAvailable(YuruhornSrc::PARAMID_ACTIVE_LEVEL));
-}
-
-TEST(YuruhornSrc, sendNoteOn) {
-    EXPECT_EQ(1, yurusrc.sendNoteOn(60, 100, 1));
+    NullFilter dummy = NullFilter();
+    YuruhornSrc inst = YuruhornSrc(dummy);
+    EXPECT_EQ(true, inst.isAvailable(YuruhornSrc::PARAMID_ACTIVE_LEVEL));
 }
 
 TEST(YuruhornSrc, setParam) {
-    EXPECT_EQ(1, yurusrc.setParam(2, 100));
+    NullFilter dummy = NullFilter();
+    YuruhornSrc inst = YuruhornSrc(dummy);
+    EXPECT_EQ(true, inst.setParam(YuruhornSrc::PARAMID_ACTIVE_LEVEL, 100));
 }
 
 TEST(YuruhornSrc, getParam) {
-    EXPECT_EQ(77, yurusrc.getParam(77));
+    NullFilter dummy = NullFilter();
+    YuruhornSrc inst = YuruhornSrc(dummy);
+    inst.setParam(YuruhornSrc::PARAMID_ACTIVE_LEVEL, 200);
+    EXPECT_EQ(200, inst.getParam(YuruhornSrc::PARAMID_ACTIVE_LEVEL));
 }

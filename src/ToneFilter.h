@@ -4,6 +4,9 @@
  * Copyright 2022 Sony Semiconductor Solutions Corporation
  */
 
+/**
+ * @file ToneFilter.h
+ */
 #ifndef TONE_FILTER_H_
 #define TONE_FILTER_H_
 
@@ -11,8 +14,8 @@
 
 class ToneFilter : public BaseFilter {
 public:
-    enum ParamId {                  // MAGIC CHAR = 'T'
-        PARAMID_TONE = ('T' << 8),  //<
+    enum ParamId {  // MAGIC CHAR = 'T'
+        PARAMID_TONE = ('T' << 8),
     };
 
     enum MusicKey {
@@ -56,7 +59,7 @@ public:
     bool sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) override;
 
 private:
-    int tone_;  //< value of MusicKey
+    int tone_;
 };
 
 #endif  // TONE_FILTER_H_

@@ -15,7 +15,7 @@
 
 #include "YuruInstrumentFilter.h"
 
-//#define DEBUG (1)
+// #define DEBUG (1)
 
 // clang-format off
 #define nop(...) do {} while (0)
@@ -35,11 +35,6 @@ static const char kClassName[] = "YuruInstrumentConfig";
 const int kMaxLineLength = 64;
 const int kBaudrate = 115200;  //< 115200bps
 const char kSectionName[] = "yurugakki";
-
-struct CommandSpec {
-    const char *name;
-    int (*func)(YuruInstrumentConfig *config, int argc, char *argv[]);
-};
 
 YuruInstrumentConfig::YuruInstrumentConfig(Filter &filter) : filter_(&filter) {
 }
@@ -162,10 +157,10 @@ int YuruInstrumentConfig::setParam(const char *param_str, const char *value_str)
         bool is_available = filter_->isAvailable(param_id);
         if (is_available) {
             filter_->setParam(param_id, value);
-            printf("setParam[%d] = %d\n", param_id, (int)value);
+            debug_printf("setParam[%d] = %d\n", param_id, (int)value);
             return 0;
         } else {
-            printf("isAvailable[%d] = %d\n", param_id, is_available);
+            error_printf("isAvailable[%d] = %d\n", param_id, is_available);
         }
     }
     return -kErrInval;

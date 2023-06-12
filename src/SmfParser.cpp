@@ -8,6 +8,8 @@
 
 #include "SmfParser.h"
 
+#include <string.h>
+
 #include "path_util.h"
 #include "midi_util.h"
 
@@ -29,52 +31,83 @@ static const char kClassName[] = "SmfParser";
 
 static const int kBufSize = 256;
 static const int kMaxTrack = 32;
-static const int kSmfChunkSize = 4;
+static const int kChunkSize = 4;
 
-struct SmfHeader {
-    char chunk_type[kSmfChunkSize];  // 4Bytes
-    uint32_t length;                 // 4Bytes
-    uint16_t format;                 // 2Bytes
-    uint16_t ntrks;                  // 2Bytes
-    uint16_t division;               // 2Bytes
+struct MThdChunk {
+    char chunk_type[kChunkSize];  // 4Bytes
+    uint32_t length;              // 4Bytes
+    uint16_t format;              // 2Bytes
+    uint16_t ntrks;               // 2Bytes
+    uint16_t division;            // 2Bytes
 };
 
-static bool parseMThd(File& file, SmfHeader* header) {
-    bool ret = true;
-    char chunk[kSmfChunkSize + 1];
-    for (int i = 0; i < kSmfChunkSize; i++) {
+struct MTrkChunk {
+    char chunk_type[kChunkSize];  // 4Bytes
+    uint32_t length;              // 4Bytes
+};
+
+static bool parseMThd(File& file, MThdChunk* mthd) {
+    char chunk[kChunkSize + 1];
+    for (int i = 0; i < kChunkSize; i++) {
         chunk[i] = file.read();
     }
-    chunk[kSmfChunkSize] = '\0';
-    strncpy(header->chunk_type, chunk, kSmfChunkSize);
-    if (strncmp(header->chunk_type, "MThd", kSmfChunkSize) != 0) {
-        ret = false;
-    } else {
-        for (size_t i = 0; i < sizeof(header->length); i++) {
-            header->length = (header->length << 8) | (file.read() & 0xFF);
-        }
-        for (size_t i = 0; i < sizeof(header->format); i++) {
-            header->format = (header->format << 8) | (file.read() & 0xFF);
-        }
-        for (size_t i = 0; i < sizeof(header->ntrks); i++) {
-            header->ntrks = (header->ntrks << 8) | (file.read() & 0xFF);
-        }
-        for (size_t i = 0; i < sizeof(header->division); i++) {
-            header->division = (header->division << 8) | (file.read() & 0xFF);
-        }
-        if (header->division & 0x8000) {
-            error_printf("[%s::%s] This MIDI file is not supported.\n", kClassName, __func__);
-            ret = false;
-        }
+    chunk[kChunkSize] = '\0';
+    memcpy(mthd->chunk_type, chunk, kChunkSize);
+    if (memcmp(mthd->chunk_type, "MThd", kChunkSize) != 0) {
+        error_printf("[%s::%s] unexpected MThd chunk: %s\n", kClassName, __func__, chunk);
+        return false;
     }
 
-    trace_printf("[%s::%s] chunk:%s, length:%d, format:%d, truck:%d, division:%d\n", kClassName, __func__, chunk, header->length, header->format, header->ntrks,
-                 header->division);
+    mthd->length = 0;
+    for (size_t i = 0; i < sizeof(mthd->length); i++) {
+        mthd->length = (mthd->length << 8) | (file.read() & 0xFF);
+    }
+    mthd->format = 0;
+    for (size_t i = 0; i < sizeof(mthd->format); i++) {
+        mthd->format = (mthd->format << 8) | (file.read() & 0xFF);
+    }
+    mthd->ntrks = 0;
+    for (size_t i = 0; i < sizeof(mthd->ntrks); i++) {
+        mthd->ntrks = (mthd->ntrks << 8) | (file.read() & 0xFF);
+    }
+    mthd->division = 0;
+    for (size_t i = 0; i < sizeof(mthd->division); i++) {
+        mthd->division = (mthd->division << 8) | (file.read() & 0xFF);
+    }
 
-    return ret;
+    trace_printf("[%s::%s] chunk:%s length:%d format:%d truck:%d division:%d\n", kClassName, __func__, chunk, mthd->length, mthd->format, mthd->ntrks,
+                 mthd->division);
+    if (mthd->division & 0x8000) {
+        error_printf("[%s::%s] This MIDI file is not supported.\n", kClassName, __func__);
+        return false;
+    }
+
+    return true;
 }
 
-static uint32_t parseVariableLength(SmfParser::SegmentReader& reader) {
+static bool parseMTrk(File& file, MTrkChunk* mtrk) {
+    char chunk[kChunkSize + 1];
+    for (int i = 0; i < kChunkSize; i++) {
+        chunk[i] = file.read();
+    }
+    chunk[kChunkSize] = '\0';
+    memcpy(mtrk->chunk_type, chunk, kChunkSize);
+    if (memcmp(mtrk->chunk_type, "MTrk", kChunkSize) != 0) {
+        error_printf("[%s::%s] unexpected MTrk chunk: %s\n", kClassName, __func__, chunk);
+        return false;
+    }
+
+    mtrk->length = 0;
+    for (size_t i = 0; i < sizeof(mtrk->length); i++) {
+        mtrk->length = (mtrk->length << 8) | (file.read() & 0xFF);
+    }
+
+    trace_printf("[%s::%s] chunk:%s length:%d\n", kClassName, __func__, chunk, mtrk->length);
+
+    return true;
+}
+
+static uint32_t parseVariableLength(SmfParser::TrackReader& reader) {
     uint32_t length = 0;
     int ch = 0x00;
     do {
@@ -88,35 +121,51 @@ static uint32_t parseVariableLength(SmfParser::SegmentReader& reader) {
     return length;
 }
 
-SmfParser::SegmentReader::SegmentReader(File* file, uint32_t offset, uint32_t size)
-    : file_(file), file_pos_(offset), seg_offset_(offset), seg_size_(size), buf_(new uint8_t[kBufSize]), buf_size_(0), buf_pos_(0) {
+SmfParser::TrackReader::TrackReader() : file_(nullptr), file_pos_(0), track_offset_(0), track_size_(0), buf_(nullptr), buf_size_(0), buf_pos_(0) {
 }
 
-SmfParser::SegmentReader::~SegmentReader() {
+SmfParser::TrackReader::TrackReader(File* file, uint32_t offset, uint32_t size)
+    : file_(file), file_pos_(offset), track_offset_(offset), track_size_(size), buf_(new uint8_t[kBufSize]), buf_size_(0), buf_pos_(0) {
+}
+
+SmfParser::TrackReader::TrackReader(const TrackReader& rhs)
+    : file_(rhs.file_),
+      file_pos_(rhs.file_pos_),
+      track_offset_(rhs.track_offset_),
+      track_size_(rhs.track_size_),
+      buf_(new uint8_t[kBufSize]),
+      buf_size_(0),
+      buf_pos_(0) {
+}
+
+SmfParser::TrackReader::~TrackReader() {
     if (buf_) {
         delete[] buf_;
         buf_ = nullptr;
     }
 }
 
-size_t SmfParser::SegmentReader::available() {
-    size_t seg_pos = file_pos_ - seg_offset_ + buf_pos_;
-    return seg_size_ - seg_pos;
+size_t SmfParser::TrackReader::available() {
+    size_t seg_pos = file_pos_ - track_offset_ + buf_pos_;
+    return track_size_ - seg_pos;
 }
 
-boolean SmfParser::SegmentReader::reset() {
-    file_pos_ = seg_offset_;
+boolean SmfParser::TrackReader::reset() {
+    file_pos_ = track_offset_;
     buf_size_ = 0;
     buf_pos_ = 0;
     return true;
 }
 
-int SmfParser::SegmentReader::read(void) {
-    size_t seg_pos = file_pos_ - seg_offset_ + buf_pos_;
+int SmfParser::TrackReader::read(void) {
+    size_t seg_pos = file_pos_ - track_offset_ + buf_pos_;
     if (file_ == nullptr) {
         return -1;
     }
-    if (seg_size_ <= seg_pos) {
+    if (track_size_ <= seg_pos) {
+        return -1;
+    }
+    if (buf_ == nullptr) {
         return -1;
     }
 
@@ -136,214 +185,61 @@ int SmfParser::SegmentReader::read(void) {
     return buf_[buf_pos_++];
 }
 
-SmfParser::SmfParser(const String& path) : file_(path.c_str()), root_tick_(0), mtrks_(), is_end_(false), readers_() {
-    file_.seek(0);
-
-    parseSMF();
-
-    debug_printf("[%s::%s] SMF File name:%s\n", kClassName, __func__, getFileName().c_str());
-    debug_printf("[%s::%s] SMF root tick:%d\n", kClassName, __func__, getRootTick());
-    for (size_t i = 0; i < mtrks_.size(); i++) {
-        debug_printf("[%s::%s] track id:%d start byte:%d data length:%d\n", kClassName, __func__, mtrks_[i].track_id, mtrks_[i].offset, mtrks_[i].size);
-    }
-    debug_printf("[%s::%s] playable track num:%d\n", kClassName, __func__, getNumberOfScores());
+SmfParser::TrackParser::TrackParser() : msg(), reader_(), is_registered_(false), running_status_(0x00), at_eot_(true) {
 }
 
-SmfParser::~SmfParser() {
-    if (file_) {
-        file_.close();
-    }
-    for (auto& e : readers_) {
-        if (e.reader) {
-            delete e.reader;
-        }
-    }
+SmfParser::TrackParser::TrackParser(File* file, size_t offset, size_t size)
+    : msg(), reader_(file, offset, size), is_registered_(false), running_status_(0x00), at_eot_(false) {
 }
 
-uint16_t SmfParser::getRootTick() {
-    return root_tick_;
+SmfParser::TrackParser::TrackParser(const TrackParser& rhs) : msg(), reader_(rhs.reader_), is_registered_(false), running_status_(0x00), at_eot_(rhs.at_eot_) {
 }
 
-String SmfParser::getFileName() {
-    return file_.name();
+bool SmfParser::TrackParser::available() {
+    return is_registered_;
 }
 
-int SmfParser::getNumberOfScores() {
-    if (mtrks_.size() > 0) {
-        return 1;
-    } else {
-        return 0;
-    }
-}
-
-bool SmfParser::loadScore(int id) {
-    debug_printf("[%s::%s] file=%s id=%d mtrks=%d mask=%08X\n", kClassName, __func__, file_.name(), id, (int)mtrks_.size(), getPlayTrack());
-
-    for (auto& e : readers_) {
-        if (e.reader) {
-            delete e.reader;
-        }
-    }
-    readers_.clear();
-
-    for (size_t i = 0; i < mtrks_.size(); i++) {
-        TrackReader track;
-        track.reader = new SegmentReader(&file_, mtrks_[i].offset, mtrks_[i].size);
-        if (getPlayTrack() & (1U << i)) {
-            track.at_eot = false;
-        } else {
-            track.at_eot = true;
-        }
-        track.is_registered = false;
-        readers_.push_back(track);
-    }
-
-    is_end_ = false;
+bool SmfParser::TrackParser::discard() {
+    is_registered_ = false;
     return true;
 }
 
-String SmfParser::getTitle(int id) {
-    if (id < 0 || mtrks_.size() <= (size_t)id) {
-        return String();
-    }
-    return mtrks_[id].name;
-};
-
-bool SmfParser::getMidiMessage(MidiMessage* midi_message) {
-    if (is_end_) {
-        midi_message->status_byte = MIDI_MSG_META_EVENT;
-        midi_message->event_code = MIDI_META_END_OF_TRACK;
-        midi_message->event_length = 0;
-        return false;
-    }
-
-    // find earliest MIDI message
-    TrackReader* earliest = nullptr;
-    for (auto& e : readers_) {
-        if (e.at_eot) {
-            continue;
-        }
-        if (!e.is_registered) {
-            if (parseMTrkEvent(e, &e.msg) == false) {
-                e.at_eot = true;
-                continue;
-            } else {
-                e.is_registered = true;
-                if (e.msg.status_byte == MIDI_MSG_META_EVENT && e.msg.event_code == MIDI_META_END_OF_TRACK) {
-                    e.at_eot = true;
-                    continue;
-                }
-            }
-        }
-        if (earliest == nullptr) {
-            earliest = &e;
-        } else if (e.msg.delta_time < earliest->msg.delta_time) {
-            earliest = &e;
-        }
-    }
-    if (earliest == nullptr) {
-        debug_printf("[%s::%s] all tracks at end\n", kClassName, __func__);
-        is_end_ = true;
-        midi_message->status_byte = MIDI_MSG_META_EVENT;
-        midi_message->event_code = MIDI_META_END_OF_TRACK;
-        midi_message->event_length = 0;
-        return true;
-    }
-
-    // pop earliest MIDI message
-    memcpy(midi_message, &earliest->msg, sizeof(*midi_message));
-    debug_printf("[%s::%s] delta_time:%ld, status_byte:%02x, event_code:%02x\n", kClassName, __func__, (unsigned long)earliest->msg.delta_time,
-                 earliest->msg.status_byte, earliest->msg.event_code);
-    earliest->is_registered = false;
-
-    // substract delta_time
-    for (auto& e : readers_) {
-        if (e.is_registered) {
-            e.msg.delta_time -= earliest->msg.delta_time;
-        }
-    }
-
-    return true;
+bool SmfParser::TrackParser::eot() {
+    return at_eot_;
 }
 
-bool SmfParser::parseSMF() {
-    struct SmfHeader mthd;
-    if (!parseMThd(file_, &mthd)) {
-        return false;
-    }
-    root_tick_ = mthd.division;
-
-    for (int i = 0; i < mthd.ntrks && i < kMaxTrack; i++) {
-        debug_printf("[%s::%s] %d/%d\n", kClassName, __func__, i, mthd.ntrks);
-        parseMTrk();
-    }
-
-    return true;
-}
-
-bool SmfParser::parseMTrk() {
-    // Get Track Headers
-    char chunk[kSmfChunkSize + 1];
-    for (int i = 0; i < kSmfChunkSize; i++) {
-        chunk[i] = file_.read();
-    }
-    chunk[kSmfChunkSize] = '\0';
-    if (strncmp(chunk, "MTrk", kSmfChunkSize) != 0) {
+bool SmfParser::TrackParser::parse() {
+    if (!reader_.available()) {
         return false;
     }
 
-    // Get track data length
-    uint32_t track_size = 0;
-    for (size_t i = 0; i < sizeof(track_size); i++) {
-        track_size = track_size << 8;
-        track_size += file_.read();
-    }
+    msg.delta_time = parseVariableLength(reader_);
+    msg.status_byte = (uint8_t)(reader_.read());
+    trace_printf("[%s::%s] delta time:%d status byte:%02x\n", kClassName, __func__, msg.delta_time, msg.status_byte);
 
-    SmfParser::MTrkSegment mtrk;
-    mtrk.track_id = (int)mtrks_.size();
-    mtrk.offset = file_.position();
-    mtrk.size = track_size;
-    mtrk.name = getBaseName(file_.name());  // TODO: get name from meta-event (Sequence/Track Name: FF 03 Len text)
-    debug_printf("[%s::%s] track_id:%d offset=%d size=%d\n", kClassName, __func__, mtrk.track_id, mtrk.offset, mtrk.size);
-    mtrks_.push_back(mtrk);
-
-    file_.seek(mtrk.offset + mtrk.size);
-
-    return true;
-}
-
-bool SmfParser::parseMTrkEvent(TrackReader& track, ScoreParser::MidiMessage* midi_message) {
-    if (!track.reader->available()) {
-        return false;
-    }
-
-    midi_message->delta_time = parseVariableLength(*track.reader);
-    uint8_t status_byte = (uint8_t)(track.reader->read());
-    trace_printf("[%s::%s] delta time:%d status byte:%02x\n", kClassName, __func__, midi_message->delta_time, status_byte);
-
-    if (status_byte == MIDI_MSG_META_EVENT) {
-        midi_message->status_byte = status_byte;
-        return parseMetaEvent(track, midi_message);
-    } else if (status_byte == MIDI_MSG_SYS_EX_EVENT || status_byte == MIDI_MSG_END_OF_EXCLUSIVE) {
-        uint32_t deta_len = parseVariableLength(*track.reader);
+    if (msg.status_byte == MIDI_MSG_META_EVENT) {
+        parseMetaEvent();
+    } else if (msg.status_byte == MIDI_MSG_SYS_EX_EVENT || msg.status_byte == MIDI_MSG_END_OF_EXCLUSIVE) {
+        uint32_t deta_len = parseVariableLength(reader_);
         for (uint32_t i = 0; i < deta_len; i++) {
-            track.reader->read();
+            reader_.read();
         }
-        return true;
     } else {
-        return parseMIDIEvent(track, midi_message, status_byte);
+        parseMIDIEvent();
     }
+    is_registered_ = true;
+    return true;
 }
 
-bool SmfParser::parseMIDIEvent(TrackReader& track, ScoreParser::MidiMessage* midi_message, uint8_t status_byte) {
-    uint8_t bytes[3] = {track.running_status, 0, 0};
+bool SmfParser::TrackParser::parseMIDIEvent() {
+    uint8_t bytes[3] = {running_status_, 0, 0};
     int write_offset = 0;
     int param_num = 0;
-    if (status_byte & 0x80) {
-        bytes[0] = status_byte;
+    if (msg.status_byte & 0x80) {
+        bytes[0] = msg.status_byte;
         write_offset = 1;
     } else {
-        bytes[1] = status_byte;
+        bytes[1] = msg.status_byte;
         write_offset = 2;
     }
     if ((bytes[0] & 0xF0) == MIDI_MSG_PROGRAM_CHANGE ||    // Program Change
@@ -353,38 +249,184 @@ bool SmfParser::parseMIDIEvent(TrackReader& track, ScoreParser::MidiMessage* mid
         param_num = 2;
     }
     for (int i = write_offset; i <= param_num; i++) {
-        bytes[i] = (uint8_t)track.reader->read();
+        bytes[i] = (uint8_t)reader_.read();
     }
-    midi_message->status_byte = bytes[0];
-    midi_message->data_byte1 = bytes[1];
-    midi_message->data_byte2 = bytes[2];
-    track.running_status = bytes[0];
+    msg.status_byte = bytes[0];
+    msg.data_byte1 = bytes[1];
+    msg.data_byte2 = bytes[2];
+    running_status_ = bytes[0];
+    trace_printf("[%s::%s] sb:%02x, db1:%d, db2:%d\n", kClassName, __func__, bytes[0], bytes[1], bytes[2]);
     return true;
 }
 
-bool SmfParser::parseMetaEvent(TrackReader& track, ScoreParser::MidiMessage* midi_message) {
-    uint8_t event_code = (uint8_t)track.reader->read();
-    midi_message->event_code = (uint8_t)event_code;
+bool SmfParser::TrackParser::parseMetaEvent() {
+    msg.event_code = (uint8_t)reader_.read();
+    msg.event_length = parseVariableLength(reader_);
 
-    uint32_t len = parseVariableLength(*track.reader);
-    midi_message->event_length = len;
-
-    trace_printf("[%s::%s] (Meta Event) Dt:%d event_code:%02x len:%u\n", kClassName, __func__, midi_message->delta_time, event_code, (unsigned int)len);
-    if (event_code == MIDI_META_SET_TEMPO && len == MIDI_METALEN_SET_TEMPO) {
-        for (uint32_t i = 0; i < len; i++) {
-            midi_message->sysex_array[i] = (uint8_t)track.reader->read();
+    trace_printf("[%s::%s] (Meta Event) Dt:%d event_code:%02x len:%u\n", kClassName, __func__, msg.delta_time, msg.event_code, (unsigned int)msg.event_length);
+    if (msg.event_code == MIDI_META_SET_TEMPO && msg.event_length == MIDI_METALEN_SET_TEMPO) {
+        for (uint32_t i = 0; i < msg.event_length; i++) {
+            msg.sysex_array[i] = (uint8_t)reader_.read();
         }
-    } else if (event_code == MIDI_META_END_OF_TRACK) {
+    } else if (msg.event_code == MIDI_META_END_OF_TRACK) {
         trace_printf("[%s::%s] (Score end)\n", kClassName, __func__);
-    } else if (event_code < 0x80) {
-        for (uint32_t i = 0; i < len; i++) {
+        at_eot_ = true;
+    } else if (msg.event_code < 0x80) {
+        for (uint32_t i = 0; i < msg.event_length; i++) {
             if (i < kSysExMaxSize) {
-                midi_message->sysex_array[i] = (uint8_t)track.reader->read();
+                msg.sysex_array[i] = (uint8_t)reader_.read();
             }
         }
     } else {
         return false;
     }
+    return true;
+}
+
+SmfParser::SmfParser(const String& path) : file_(path.c_str()), root_tick_(0), tracks_(), is_end_(false), parsers_() {
+    parse();
+    debug_printf("[%s::%s] SMF File name:%s\n", kClassName, __func__, getFileName().c_str());
+    debug_printf("[%s::%s] SMF root tick:%d\n", kClassName, __func__, getRootTick());
+    for (size_t i = 0; i < tracks_.size(); i++) {
+        debug_printf("[%s::%s] track id:%d offset:%d length:%d\n", kClassName, __func__, tracks_[i].track_id, tracks_[i].offset, tracks_[i].size);
+    }
+    debug_printf("[%s::%s] scores num:%d\n", kClassName, __func__, getNumberOfScores());
+}
+
+SmfParser::~SmfParser() {
+    parsers_.clear();
+    if (file_) {
+        file_.close();
+    }
+}
+
+uint16_t SmfParser::getRootTick() {
+    return root_tick_;
+}
+
+String SmfParser::getFileName() {
+    String s = file_.name();
+    return s.substring(s.lastIndexOf("/") + 1);
+}
+
+int SmfParser::getNumberOfScores() {
+    if (tracks_.size() > 0) {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+bool SmfParser::loadScore(int /*id*/) {
+    debug_printf("[%s::%s] file=%s mtrks=%d mask=%08X\n", kClassName, __func__, file_.name(), (int)tracks_.size(), getPlayTrack());
+    parsers_.clear();
+    for (size_t i = 0; i < tracks_.size(); i++) {
+        parsers_.push_back(TrackParser(&file_, tracks_[i].offset, tracks_[i].size));
+    }
+    is_end_ = false;
+    return true;
+}
+
+String SmfParser::getTitle(int id) {
+    if (id < 0 || tracks_.size() <= (size_t)id) {
+        return String();
+    }
+    return tracks_[id].name;
+}
+
+bool SmfParser::getMidiMessage(MidiMessage* midi_message) {
+    if (is_end_) {
+        midi_message->delta_time = 0;
+        midi_message->status_byte = MIDI_MSG_META_EVENT;
+        midi_message->event_code = MIDI_META_END_OF_TRACK;
+        midi_message->event_length = 0;
+        return false;
+    }
+
+    while (true) {
+        // find earliest MIDI message
+        TrackParser* earliest = nullptr;
+        size_t earliest_index = parsers_.size();
+        for (size_t i = 0; i < parsers_.size(); i++) {
+            TrackParser& e = parsers_[i];
+            if (e.eot()) {
+                continue;
+            }
+            if (!e.available()) {
+                if (e.parse() == false) {
+                    continue;
+                }
+                if (e.msg.status_byte == MIDI_MSG_META_EVENT && e.msg.event_code == MIDI_META_END_OF_TRACK) {
+                    e.discard();
+                    continue;
+                }
+            }
+            if (earliest == nullptr) {
+                earliest = &e;
+                earliest_index = i;
+            } else if (e.msg.delta_time < earliest->msg.delta_time) {
+                earliest = &e;
+                earliest_index = i;
+            }
+        }
+        if (earliest == nullptr) {
+            debug_printf("[%s::%s] all tracks at end\n", kClassName, __func__);
+            is_end_ = true;
+            midi_message->delta_time = 0;
+            midi_message->status_byte = MIDI_MSG_META_EVENT;
+            midi_message->event_code = MIDI_META_END_OF_TRACK;
+            midi_message->event_length = 0;
+            return true;
+        }
+
+        if ((getPlayTrack() & (1U << earliest_index)) == 0) {
+            earliest->discard();
+            continue;
+        } else {
+            // pop earliest MIDI message
+            memcpy(midi_message, &earliest->msg, sizeof(*midi_message));
+            debug_printf("[%s::%s] delta_time:%ld, status_byte:%02x, event_code:%02x\n", kClassName, __func__, earliest->msg.delta_time,
+                         earliest->msg.status_byte, earliest->msg.event_code);
+            // substract delta_time
+            for (auto& e : parsers_) {
+                if (e.available()) {
+                    e.msg.delta_time -= midi_message->delta_time;
+                }
+            }
+            earliest->discard();
+            break;
+        }
+    }
+
+    return true;
+}
+
+bool SmfParser::parse() {
+    file_.seek(0);
+
+    struct MThdChunk mthd;
+    if (!parseMThd(file_, &mthd)) {
+        return false;
+    }
+    root_tick_ = mthd.division;
+
+    tracks_.clear();
+    for (int i = 0; i < mthd.ntrks && i < kMaxTrack; i++) {
+        debug_printf("[%s::%s] %d/%d\n", kClassName, __func__, i, mthd.ntrks);
+        SmfParser::Track track;
+        track.track_id = (int)tracks_.size();
+        track.name = getBaseName(file_.name());  // TODO: get name from meta-event (Sequence/Track Name: FF 03 Len text)
+        MTrkChunk mtrk;
+        if (!parseMTrk(file_, &mtrk)) {
+            return false;
+        }
+        track.size = mtrk.length;
+        track.offset = file_.position();
+        debug_printf("[%s::%s] track_id:%d offset=%d size=%d\n", kClassName, __func__, track.track_id, track.offset, track.size);
+        tracks_.push_back(track);
+        file_.seek(track.offset + track.size);
+    }
+
     return true;
 }
 

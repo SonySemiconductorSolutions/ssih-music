@@ -4,15 +4,47 @@
  * Copyright 2022 Sony Semiconductor Solutions Corporation
  */
 
+/**
+ * @file WavReader.h
+ */
 #ifndef WAV_READER_H_
 #define WAV_READER_H_
 #include <Arduino.h>
 #include <SDHCI.h>
 
-const unsigned int kWaveChunkSize = 4;
-
+/**
+ * @brief @~japanese WAVファイルまたはPCMファイルから、音声データ領域の情報を読み出します。
+ */
 class WavReader {
 public:
+    /**
+     * @brief @~japanese WavReader オブジェクトを生成します。
+     * @param[in] file @~japanese 入力ファイル
+     */
+    WavReader(File& file);
+
+    /**
+     * @brief @~japanese 音声データ領域のファイルオフセットを取得します。
+     * @return @~japanese 音声データ領域のファイルオフセット
+     */
+    uint32_t getPcmOffset();
+
+    /**
+     * @brief @~japanese 音声データ領域のデータサイズを取得します。
+     * @return @~japanese 音声データ領域のデータサイズ
+     */
+    uint32_t getPcmSize();
+
+    /**
+     * @brief @~japanese 入力ファイルがWAVファイルか否かを取得します。
+     * @retval true WAV file
+     * @retval false Not a WAV file
+     */
+    bool isWaveFile();
+
+private:
+    static const unsigned int kWaveChunkSize = 4;
+
     struct RIFFHeader {
         RIFFHeader();
         char chunk[kWaveChunkSize];
@@ -33,13 +65,6 @@ public:
         uint16_t cb_size;           // Extended parameters
     };
 
-    WavReader(File& file);
-
-    uint32_t getPcmOffset();
-    uint32_t getPcmSize();
-    bool isWaveFile();
-
-private:
     uint32_t pos_;
     uint32_t size_;
     WaveHeader wave_header_;

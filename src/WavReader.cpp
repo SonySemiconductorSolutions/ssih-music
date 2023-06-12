@@ -8,7 +8,9 @@
 
 #include "WavReader.h"
 
-//#define DEBUG (1)
+#include <string.h>
+
+// #define DEBUG (1)
 
 // clang-format off
 #define nop(...) do {} while (0)
@@ -100,7 +102,7 @@ bool WavReader::load(File& file) {
         riff_chunk[kWaveChunkSize] = '\0';
         trace_printf("[%s::%s] chunk:%s\n", kClassName, __func__, riff_chunk);
         data_len = getByte32LE(file);
-        if (strncmp(riff_chunk, "data", kWaveChunkSize) == 0) {
+        if (memcmp(riff_chunk, "data", kWaveChunkSize) == 0) {
             pos_ = file.position();
             size_ = data_len;
             break;
@@ -127,7 +129,7 @@ bool WavReader::parseHeader(File& file) {
         debug_printf("[%s::%s] %s is not WAVE.\n", kClassName, __func__, file.name());
         return false;
     }
-    if (strncmp(riffh.riff_format, "WAVE", sizeof(riffh.riff_format)) != 0) {
+    if (memcmp(riffh.riff_format, "WAVE", sizeof(riffh.riff_format)) != 0) {
         debug_printf("[%s::%s] %s is not WAVE Format File.\n", kClassName, __func__, file.name());
         return false;
     }
@@ -152,8 +154,8 @@ bool WavReader::parseRIFFHeader(File& file, RIFFHeader* riffh) {
         riff_chunk[i] = file.read();
     }
     riff_chunk[kWaveChunkSize] = '\0';
-    strncpy(riffh->chunk, riff_chunk, kWaveChunkSize);
-    if (strncmp(riffh->chunk, "RIFF", kWaveChunkSize) != 0) {
+    memcpy(riffh->chunk, riff_chunk, kWaveChunkSize);
+    if (memcmp(riffh->chunk, "RIFF", kWaveChunkSize) != 0) {
         return false;
     }
 
@@ -175,8 +177,8 @@ bool WavReader::parseWaveHeader(File& file, WaveHeader* waveh) {
             wave_chunk[i] = file.read();
         }
         wave_chunk[kWaveChunkSize] = '\0';
-        strncpy(waveh->chunk, wave_chunk, kWaveChunkSize);
-        if (strncmp(waveh->chunk, "fmt ", kWaveChunkSize) == 0) {
+        memcpy(waveh->chunk, wave_chunk, kWaveChunkSize);
+        if (memcmp(waveh->chunk, "fmt ", kWaveChunkSize) == 0) {
             break;
         }
 

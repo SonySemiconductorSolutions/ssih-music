@@ -276,7 +276,8 @@ uint16_t TextScoreParser::getRootTick() {
 }
 
 String TextScoreParser::getFileName() {
-    return file_.name();
+    String s = file_.name();
+    return s.substring(s.lastIndexOf("/") + 1);
 }
 
 int TextScoreParser::getNumberOfScores() {

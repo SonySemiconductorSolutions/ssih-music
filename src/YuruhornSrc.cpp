@@ -11,8 +11,9 @@
 #include <Arduino.h>
 
 #include <MP.h>
+#include <OutputMixer.h>
 
-//#define DEBUG (1)
+// #define DEBUG (1)
 
 // clang-format off
 #define nop(...) do {} while (0)
@@ -27,13 +28,18 @@
 #define error_printf printf
 #endif  // DEBUG
 
-static const char kClassName[] = "VoiceCapture";
+static const char kClassName[] = "YuruhornSrc";
 
 #define UP_THRSH_PERCENT (80)      //< 80%
 #define DOWN_THRSH_PERCENT (20)    //< 20%
 #define NORMAL_THRSH_PERCENT (50)  //< 50%
 
-static const struct YuruhornSrc::FreqNotePair freq2note_all[] = {
+struct FreqNotePair {
+    unsigned int freq;
+    int note;
+};
+
+static const struct FreqNotePair g_freq2note[] = {                                           //< index = note + 1
     {77, -1},                                                                                //< sentinel
     {82, 0},       {87, 1},       {92, 2},      {97, 3},      {103, 4},      {109, 5},       //< C-1 to B-1
     {116, 6},      {122, 7},      {130, 8},     {138, 9},     {146, 10},     {154, 11},      //<
@@ -64,169 +70,28 @@ static const int kDefaultCorrectTime = 5;
 static const int kDefaultSuppressTime = 3;
 static const int kDefaultKeepTime = 3;
 
-YuruhornSrc::NoteHistory::NoteHistory() {
-    index_ = 0;
-    for (int i = 0; i < HISTORY_LEN; i++) {
-        history_[i] = INVALID_NOTE_NUMBER;
-    }
-    for (int i = 0; i < PITCH_NUM; i++) {
-        pitch_[i] = 0;
-    }
-    for (int i = 0; i < EXP_NUM; i++) {
-        exp_[i] = 0;
-    }
+YuruhornSrc::YuruhornSrc(Filter& filter) : YuruhornSrc(PIN_NOT_ASSIGNED, PIN_NOT_ASSIGNED, filter) {
 }
 
-void YuruhornSrc::NoteHistory::update(uint8_t note) {
-    uint8_t oldest_note = history_[index_];
-    uint8_t newest_note = history_[index_] = note;
-    index_ = (index_ + 1) % HISTORY_LEN;
-
-    if (oldest_note <= NOTE_NUMBER_MAX) {
-        pitch_[oldest_note % PITCH_NUM]--;
-        exp_[oldest_note / PITCH_NUM]--;
-    }
-    if (newest_note <= NOTE_NUMBER_MAX) {
-        pitch_[newest_note % PITCH_NUM]++;
-        exp_[newest_note / PITCH_NUM]++;
-    }
-}
-
-uint8_t YuruhornSrc::NoteHistory::lookup(uint8_t note) {
-    int pitch = note % PITCH_NUM;
-    if (pitch_[pitch] == HISTORY_LEN) {
-        // if all history has same pitch
-        int exp = note / PITCH_NUM;
-        for (int i = 0; i < EXP_NUM; i++) {
-            // adopt majority exp
-            if (exp_[i] > exp_[exp]) {
-                exp = i;
-            }
-        }
-        return exp * PITCH_NUM + pitch;
-    }
-    return note;
-}
-
-YuruhornSrc::YuruhornSrc(Filter& filter)
+YuruhornSrc::YuruhornSrc(uint8_t perform_pin, uint8_t volume_pin, Filter& filter)
     : VoiceCapture(filter),
-      active_thres_(kDefaultActiveThresh),
-      performance_button_enabled_(false),
-      playing_note_(INVALID_NOTE_NUMBER),
+      active_level_(kDefaultActiveThresh),
+      is_button_enable_(perform_pin != PIN_NOT_ASSIGNED ? true : false),
+      perform_note_(INVALID_NOTE_NUMBER),
       extend_frames_(kDefaultCorrectTime),
       suppress_frames_(kDefaultSuppressTime),
       keep_frames_(kDefaultKeepTime),
       invalid_counter_(0),
       active_counter_(0),
       silent_counter_(0),
-      prev_note_(INVALID_NOTE_NUMBER),
-      prev_btn_(false),
-      history_(),
-      playing_scale_(SCALE_ALL),
-      max_playing_note_(NOTE_NUMBER_MAX),
-      min_playing_note_(NOTE_NUMBER_MIN),
-      input_level_(0),
-      monitor_enabled_(false) {
-    setPlayingKey(playing_scale_);
-}
-
-void YuruhornSrc::setPlayingNote(uint8_t new_playing_note) {
-    playing_note_ = new_playing_note;
-}
-
-int YuruhornSrc::getActiveThres() {
-    return active_thres_;
-}
-
-void YuruhornSrc::setActiveThres(int new_active_thres) {
-    active_thres_ = new_active_thres;
-    return;
-}
-
-uint8_t YuruhornSrc::getNote(uint32_t freq, uint8_t prev) {
-    uint32_t thresh;
-    uint8_t note = INVALID_NOTE_NUMBER;
-
-    // skip process when invalid freq
-    if (freq <= 0) {
-        return note;
-    }
-
-    int prev_idx = note2index(prev);
-    debug_printf("[%s::%s] prev = %d, prev_index = %d, input_Freq = %d,", kClassName, __func__, prev, prev_idx, freq);
-
-    size_t i = 1;
-    for (i = 1; i < freq2note_.size(); i++) {
-        // take a wide frequency range of previous note
-        if (prev < 0) {
-            thresh = freq2note_[i - 1].freq + (freq2note_[i].freq - freq2note_[i - 1].freq) * NORMAL_THRSH_PERCENT / 100;
-        } else if (freq > freq2note_[prev_idx].freq) {
-            thresh = freq2note_[i - 1].freq + (freq2note_[i].freq - freq2note_[i - 1].freq) * UP_THRSH_PERCENT / 100;
-        } else {
-            thresh = freq2note_[i - 1].freq + (freq2note_[i].freq - freq2note_[i - 1].freq) * DOWN_THRSH_PERCENT / 100;
-        }
-
-        if (freq < thresh) {
-            break;
-        }
-    }
-    note = freq2note_[i - 1].note;
-    debug_printf(" thresh=%d,", thresh);
-    if (note <= freq2note_[0].note || freq2note_[freq2note_.size() - 1].note <= note) {
-        // first and last elements are invalid
-        note = INVALID_NOTE_NUMBER;
-    }
-
-    history_.update(note);
-    note = history_.lookup(note);
-
-    debug_printf(" return note_num = %d\n", note);
-    return note;
-}
-
-int YuruhornSrc::getResult(int8_t* rcvid, VoiceCapture::Result** result, int subid) {
-    int ret;
-
-    ret = MP.Recv(rcvid, result, subid);
-    return ret;
-}
-
-void YuruhornSrc::setPlayingKey(int playing_key) {
-    freq2note_.clear();
-    bool first_push = true;
-
-    for (size_t i = 1; i < sizeof(freq2note_all) / sizeof(freq2note_all[0]); i++) {
-        int note = freq2note_all[i].note;
-        if (playing_key & (1U << (note % PITCH_NUM))) {
-            if (min_playing_note_ <= note && note <= max_playing_note_) {
-                if (first_push) {
-                    // push end mark
-                    freq2note_.push_back(freq2note_all[i - 1]);
-                    first_push = false;
-                }
-                freq2note_.push_back(freq2note_all[i]);
-            }
-        }
-    }
-
-    if (freq2note_.size() > 0) {
-        // push end mark
-        freq2note_.push_back(freq2note_all[freq2note_.back().note + 2]);
-    }
-    return;
-}
-
-bool YuruhornSrc::sendNoteOff(uint8_t note, uint8_t velocity, uint8_t channel) {
-    setPlayingNote(INVALID_NOTE_NUMBER);
-    return BaseFilter::sendNoteOff(note, velocity, channel);
-}
-
-bool YuruhornSrc::sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) {
-#ifdef ENABLE_PROFILE
-    digitalWrite(PIN_D17, HIGH);
-#endif
-    setPlayingNote(note);
-    return BaseFilter::sendNoteOn(note, velocity, channel);
+      scale_mask_(SCALE_ALL),
+      max_note_(NOTE_NUMBER_MAX),
+      min_note_(NOTE_NUMBER_MIN),
+      level_meter_(0),
+      is_monitor_enable_(false),
+      monitor_volume_(0),
+      perform_pin_(perform_pin),
+      volume_pin_(volume_pin) {
 }
 
 bool YuruhornSrc::isAvailable(int param_id) {
@@ -257,15 +122,15 @@ bool YuruhornSrc::isAvailable(int param_id) {
 
 intptr_t YuruhornSrc::getParam(int param_id) {
     if (param_id == YuruhornSrc::PARAMID_ACTIVE_LEVEL) {
-        return getActiveThres();
+        return getActiveLevel();
     } else if (param_id == YuruhornSrc::PARAMID_PLAY_BUTTON_ENABLE) {
-        return performance_button_enabled_;
+        return is_button_enable_;
     } else if (param_id == YuruhornSrc::PARAMID_MAX_NOTE) {
-        return max_playing_note_;
+        return max_note_;
     } else if (param_id == YuruhornSrc::PARAMID_MIN_NOTE) {
-        return min_playing_note_;
+        return min_note_;
     } else if (param_id == YuruhornSrc::PARAMID_SCALE) {
-        return playing_scale_;
+        return scale_mask_;
     } else if (param_id == YuruhornSrc::PARAMID_CORRECT_FRAMES) {
         return extend_frames_;
     } else if (param_id == YuruhornSrc::PARAMID_SUPPRESS_FRAMES) {
@@ -273,9 +138,9 @@ intptr_t YuruhornSrc::getParam(int param_id) {
     } else if (param_id == YuruhornSrc::PARAMID_KEEP_FRAMES) {
         return keep_frames_;
     } else if (param_id == YuruhornSrc::PARAMID_VOLUME_METER) {
-        return input_level_;
+        return level_meter_;
     } else if (param_id == YuruhornSrc::PARAMID_MONITOR_ENABLE) {
-        return monitor_enabled_;
+        return is_monitor_enable_;
     } else {
         return VoiceCapture::getParam(param_id);
     }
@@ -283,20 +148,17 @@ intptr_t YuruhornSrc::getParam(int param_id) {
 
 bool YuruhornSrc::setParam(int param_id, intptr_t value) {
     if (param_id == YuruhornSrc::PARAMID_ACTIVE_LEVEL) {
-        setActiveThres(value);
+        setActiveLevel(value);
         return true;
     } else if (param_id == YuruhornSrc::PARAMID_PLAY_BUTTON_ENABLE) {
-        performance_button_enabled_ = value;
+        is_button_enable_ = value;
         return true;
     } else if (param_id == YuruhornSrc::PARAMID_MAX_NOTE) {
-        max_playing_note_ = value;
-        setPlayingKey(playing_scale_);
+        max_note_ = value;
     } else if (param_id == YuruhornSrc::PARAMID_MIN_NOTE) {
-        min_playing_note_ = value;
-        setPlayingKey(playing_scale_);
+        min_note_ = value;
     } else if (param_id == YuruhornSrc::PARAMID_SCALE) {
-        playing_scale_ = value;
-        setPlayingKey(value);
+        scale_mask_ = value;
     } else if (param_id == YuruhornSrc::PARAMID_CORRECT_FRAMES) {
         extend_frames_ = value;
     } else if (param_id == YuruhornSrc::PARAMID_SUPPRESS_FRAMES) {
@@ -307,98 +169,178 @@ bool YuruhornSrc::setParam(int param_id, intptr_t value) {
         if (value) {
             printf("millis in_freq out_freq volume threshold\n");
         }
-        monitor_enabled_ = value;
+        is_monitor_enable_ = value;
     } else {
         return VoiceCapture::setParam(param_id, value);
     }
     return true;
 }
 
-void YuruhornSrc::onCapture(unsigned int freq_numer, unsigned int freq_denom, unsigned int volume) {
-    bool btn;
-    uint8_t note;
+int YuruhornSrc::getActiveLevel() {
+    return active_level_;
+}
 
-    input_level_ = volume;
+void YuruhornSrc::setActiveLevel(int active_level) {
+    active_level_ = active_level;
+    return;
+}
+
+void YuruhornSrc::onCapture(unsigned int freq_numer, unsigned int freq_denom, unsigned int volume) {
+    bool button = true;
+    uint8_t note = INVALID_NOTE_NUMBER;
+
+    level_meter_ = volume;
     ledOn(LED2);
 
     trace_printf("[%s::%s] freq:%d, volume:%d\n", kClassName, __func__, freq_numer * 10 / freq_denom, volume);
-    note = getNote(freq_numer * 10 / freq_denom, prev_note_);
-    note = decideNote(note, volume);
-    if (monitor_enabled_) {
-        int note_freq = 0;
+    uint8_t lookup_note = lookupNote(freq_numer * 10 / freq_denom);
+    note = lingerNote(lookup_note, volume);
+    if (is_monitor_enable_) {
+        unsigned int note_freq = 0;
         if (note != INVALID_NOTE_NUMBER) {
-            for (const auto& e : freq2note_) {
+            for (const auto& e : g_freq2note) {
                 if (e.note == note) {
                     note_freq = e.freq;
+                    break;
                 }
             }
-            note_freq = freq2note_[note2index(note)].freq;
         }
         printf("%d %d %d %d %d\n",                   //
                (int)(millis() % 1000),               //
                (int)(freq_numer * 10 / freq_denom),  //
                (int)note_freq,                       //
                (int)(volume / 2),                    //
-               (int)(active_thres_ / 2)              //
+               (int)(active_level_ / 2)              //
         );                                           //
     }
 
-    if (performance_button_enabled_) {
-        btn = (digitalRead(PIN_D14) == LOW);
+    if (is_button_enable_ && perform_pin_ != PIN_NOT_ASSIGNED) {
+        button = (digitalRead(perform_pin_) == LOW);
+        if (!button) {
+            note = INVALID_NOTE_NUMBER;
+        }
     } else {
-        btn = true;
+        button = true;
     }
 
-    // Frontend's output frequency is 16kHz,
-    // but pitch_detection is 8kHz as default,
-    // peakFs needs to be multiply with 2.
-    if (!btn) {
-        note = INVALID_NOTE_NUMBER;
-    }
-    if (note != prev_note_) {
-        if (prev_note_ != INVALID_NOTE_NUMBER) {
-            sendNoteOff(prev_note_, DEFAULT_VELOCITY, DEFAULT_CHANNEL);
+    if (note != perform_note_) {
+        if (volume_pin_ != PIN_NOT_ASSIGNED) {
+            int dial = (analogRead(volume_pin_) >> 2) & 0xFF;  // 10bit (0 to 1023) -> 8bit (0 to 255)
+            int pos = dial * 100 / 0xFF;                       // 0 to 100%
+            struct level_dia {
+                int pos;    //< 0 to 100
+                int level;  //< -1020(-102.0dB) to +120(+12.0dB)
+            };
+#if 0    //
+            const struct level_dia lut[] = {
+                {0, -800},  // 0% = -80.0dB
+                {50, 0},    // 50% = 0.0dB
+                {100, 120}   // 100% = +12.0dB
+            };
+#elif 0  //
+            const struct level_dia lut[] = {
+                {0, -400},  // 0% = -40.0dB
+                {50, 0},    // 50% = 0.0dB
+                {100, 60}   // 100% = +6.0dB
+            };
+#elif 1  //
+            const struct level_dia lut[] = {
+                {0, -780},   // 0% = -78.0dB
+                {20, -300},  // 20% = -30.0dB
+                {50, 0},     // 50% = 0.0dB
+                {100, 120}   // 100% = +12.0dB
+            };
+#else
+#error select monitor level dia
+#endif
+            int monitor_volume = 0;
+            const struct level_dia* lo = nullptr;
+            for (const auto& hi : lut) {
+                if (lo != nullptr) {
+                    if (lo->pos <= pos && pos <= hi.pos) {
+                        int pos_range = hi.pos - lo->pos;
+                        int level_range = hi.level - lo->level;
+                        int delta_pos = pos - lo->pos;
+                        monitor_volume = lo->level + delta_pos * level_range / pos_range;
+                        break;
+                    }
+                }
+                lo = &hi;
+            }
+            if (monitor_volume != monitor_volume_) {
+                OutputMixer::getInstance()->setVolume(0, monitor_volume, 0);  // -1020(-102.0dB) to +120(+12.0dB)
+                monitor_volume_ = monitor_volume;
+            }
+            debug_printf("[%s::%s] dial=%d/255, volume=%d\n", kClassName, __func__, dial, monitor_volume);
+        }
+        if (perform_note_ != INVALID_NOTE_NUMBER) {
+            sendNoteOff(perform_note_, DEFAULT_VELOCITY, DEFAULT_CHANNEL);
         }
         if (note != INVALID_NOTE_NUMBER) {
             sendNoteOn(note, DEFAULT_VELOCITY, DEFAULT_CHANNEL);
         }
-        prev_note_ = note;
+        perform_note_ = note;
     }
-    prev_btn_ = btn;
 
     ledOff(LED2);
 }
 
-int YuruhornSrc::note2index(uint8_t note) {
-    int ret = -1;
+uint8_t YuruhornSrc::lookupNote(unsigned int freq) {
+    uint8_t note = INVALID_NOTE_NUMBER;
 
-    for (size_t i = 0; i < freq2note_.size(); i++) {
-        if (freq2note_[i].note == note) {
-            ret = i;
-            break;
-        }
+    unsigned int thresh = 0;
+    unsigned int current_freq = 0;
+    if (perform_note_ != INVALID_NOTE_NUMBER) {
+        current_freq = g_freq2note[perform_note_ + 1].freq;  // index = note + 1
     }
 
-    return ret;
+    const struct FreqNotePair* lo = nullptr;
+    for (const auto& hi : g_freq2note) {
+        if (lo != nullptr) {
+            if ((scale_mask_ & (1U << (hi.note % PITCH_NUM))) == 0) {
+                continue;
+            }
+            int ratio = NORMAL_THRSH_PERCENT;
+            if (current_freq == 0) {
+                ratio = NORMAL_THRSH_PERCENT;
+            } else if (freq > current_freq) {
+                ratio = UP_THRSH_PERCENT;
+            } else {
+                ratio = DOWN_THRSH_PERCENT;
+            }
+            thresh = lo->freq + (hi.freq - lo->freq) * ratio / 100;
+            if (freq < thresh) {
+                break;
+            }
+        }
+        lo = &hi;
+    }
+
+    if (lo != nullptr && min_note_ <= lo->note && lo->note <= max_note_) {
+        note = lo->note;
+    }
+    debug_printf("[%s::%s] thresh=%d, note=%d\n", kClassName, __func__, thresh, note);
+
+    return note;
 }
 
-uint8_t YuruhornSrc::decideNote(uint8_t note, uint16_t vol) {
+uint8_t YuruhornSrc::lingerNote(uint8_t note, unsigned int volume) {
     uint8_t ret = note;
 
     // if input volume is enough, keep making the sound
-    if (note == INVALID_NOTE_NUMBER && vol >= active_thres_) {
+    if (note == INVALID_NOTE_NUMBER && volume >= (unsigned int)active_level_) {
         if (invalid_counter_ < extend_frames_) {
             invalid_counter_++;
-            ret = playing_note_;
+            ret = perform_note_;
         }
     } else {
         invalid_counter_ = 0;
     }
 
-    if (vol < active_thres_) {
+    if (volume < (unsigned int)active_level_) {
         active_counter_ = 0;
         if (silent_counter_ < keep_frames_) {
-            ret = playing_note_;
+            ret = perform_note_;
         }
         silent_counter_++;
     } else {
