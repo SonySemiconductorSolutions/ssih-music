@@ -18,7 +18,7 @@
 
 #include "SFZParser.h"
 #include "PcmRenderer.h"
-#include "YuruInstrumentFilter.h"
+#include "YuruInstrumentConfig.h"
 
 /**
  * @brief @~japanese 音源定義ファイル(SFZファイル)にしたがって、音源を再生する楽器部品です。

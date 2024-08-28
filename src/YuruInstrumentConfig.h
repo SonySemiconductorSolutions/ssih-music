@@ -16,6 +16,8 @@
 
 #include "YuruInstrumentFilter.h"
 
+#define EMMC_USE
+
 /**
  * @brief @~japanese Filter のパラメータ設定を行うコンフィグファイルを実現するクラスです。
  */

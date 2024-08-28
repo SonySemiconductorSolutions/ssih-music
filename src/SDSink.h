@@ -19,7 +19,7 @@
 #include <File.h>
 
 #include "PcmRenderer.h"
-#include "YuruInstrumentFilter.h"
+#include "YuruInstrumentConfig.h"
 
 /**
  * @brief @~japanese ユーザーが定義した音源テーブルにしたがって、音源を再生する楽器部品です。

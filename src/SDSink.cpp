@@ -8,7 +8,13 @@
 
 #include "SDSink.h"
 
+#ifdef EMMC_USE
+#include <eMMC.h>
+#define EMMC_POWER_PIN 26
+#define EMMC_EN 31 // High=eMMC / Low=SD
+#else
 #include <SDHCI.h>
+#endif
 
 #include "WavReader.h"
 
@@ -93,6 +99,26 @@ SDSink::~SDSink() {
 
 bool SDSink::begin() {
     NullFilter::begin();
+
+#ifdef EMMC_USE
+    pinMode(EMMC_EN, OUTPUT);
+    digitalWrite(EMMC_EN, HIGH); //eMMC Select
+
+    pinMode(EMMC_POWER_PIN, OUTPUT);
+    digitalWrite(EMMC_POWER_PIN, HIGH);
+    delay(50);
+    if (!eMMC.begin())
+    {
+        Serial.println("eMMC can't begin");
+        exit(1);
+    }
+#else
+    SDClass sdcard;
+    if (!sdcard.begin()) {
+        error_printf("[%s::%s] error: cannot access sdcard\n", kClassName, __func__);
+        exit(1);
+     }
+#endif
     for (size_t i = 0; i < sizeof(units_) / sizeof(units_[0]); i++) {
         if (units_[i].path.length() == 0) {
             continue;
@@ -101,12 +127,11 @@ bool SDSink::begin() {
         if (units_[i].path[0] == '/') {
             file = File(units_[i].path.c_str());
         } else {
-            SDClass sdcard;
-            if (!sdcard.begin()) {
-                error_printf("[%s::%s] error: cannot access sdcard\n", kClassName, __func__);
-                break;
-            }
+#ifdef EMMC_USE
+            file = eMMC.open(units_[i].path.c_str());
+#else
             file = sdcard.open(units_[i].path.c_str());
+#endif
         }
         if (!file) {
             error_printf("[%s::%s] error: cannot open \"%s\"\n", kClassName, __func__, units_[i].path.c_str());

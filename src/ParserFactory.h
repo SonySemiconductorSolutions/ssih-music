@@ -15,6 +15,7 @@
 #include <File.h>
 
 #include "ScoreParser.h"
+#include "YuruInstrumentConfig.h"
 
 /**
  * @brief @~japanese ScoreParser オブジェクトの Factory クラスです。

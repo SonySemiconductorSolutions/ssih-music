@@ -128,7 +128,11 @@ bool ParserFactory::createPlaylist(const String& path) {
             String file_name = file.name();
             ScoreFileType type = getFileType(file_name);
             if (type == kScoreFileTypeMidi || type == kScoreFileTypeTxt) {
+#ifdef EMMC_USE
+                String kSDFullPath = "/mnt/emmc/";
+#else
                 String kSDFullPath = "/mnt/sd0/";
+#endif
                 // Convert file name to full path - > current path
                 String sd_current_path;
                 if (file_name.startsWith(kSDFullPath)) {

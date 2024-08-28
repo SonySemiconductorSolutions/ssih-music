@@ -42,13 +42,17 @@ struct CommandSpec {
 };
 
 static void PrintLsItem(File &file) {
-    const char sdroot[] = "/mnt/sd0/";
-    const size_t sdroot_length = strlen(sdroot);
+#ifdef EMMC_USE
+    const char root[] = "/mnt/emmc/";
+#else
+    const char root[] = "/mnt/sd0/";
+#endif
+    const size_t root_length = strlen(root);
     if (file) {
         // drop prefix if starts with "/mnt/sd0/"
         const char *path = file.name();
-        if (strncmp(path, sdroot, sdroot_length) == 0) {
-            path = path + sdroot_length;
+        if (strncmp(path, root, root_length) == 0) {
+            path = path + root_length;
         }
         if (file.isDirectory()) {
             printf("%s/\n", path);

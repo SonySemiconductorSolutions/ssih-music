@@ -15,8 +15,14 @@
 #include <vector>
 
 #include <Arduino.h>
-
+#ifdef EMMC_USE
+#include <eMMC.h>
+#define EMMC_POWER_PIN 26
+#define EMMC_EN 31 // High=eMMC / Low=SD
+#else
 #include <SDHCI.h>
+#endif
+
 #include <Storage.h>
 
 #include "path_util.h"
@@ -335,19 +341,35 @@ bool SFZSink::begin() {
     NullFilter::begin();
 
     debug_printf("[%s::%s] loading sfz\n", kClassName, __func__);
+#ifdef EMMC_USE
+    pinMode(EMMC_EN, OUTPUT);
+    digitalWrite(EMMC_EN, HIGH); //eMMC Select
 
+    pinMode(EMMC_POWER_PIN, OUTPUT);
+    digitalWrite(EMMC_POWER_PIN, HIGH);
+    delay(50);
+    if (!eMMC.begin())
+    {
+        Serial.println("eMMC can't begin");
+        exit(1);
+    }
+#else
+    SDClass sdcard;
+    if (!sdcard.begin()) {
+        error_printf("[%s::%s] error: cannot access sdcard\n", kClassName, __func__);
+        exit(1);
+     }
+#endif
     File file;
     if (sfz_path_.startsWith("/")) {
         file = File(sfz_path_.c_str());
     } else {
-        SDClass sdcard;
-        if (!sdcard.begin()) {
-            error_printf("[%s::%s] error: cannot access sdcard\n", kClassName, __func__);
-            ret = false;
-        } else {
-            file = sdcard.open(sfz_path_);
-            sfz_path_ = file.name();
-        }
+#ifdef EMMC_USE
+        file = eMMC.open(sfz_path_);
+#else
+        file = sdcard.open(sfz_path_);
+#endif
+        sfz_path_ = file.name();
     }
     if (!file) {
         error_printf("[%s::%s] error: cannot open \"%s\"\n", kClassName, __func__, sfz_path_.c_str());
